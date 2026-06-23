@@ -485,7 +485,7 @@ class FFmpegTestVideoWindow(QMainWindow):
 		if self.chk_pts_overlay.isChecked():
 			pts = (
 				f"drawtext=fontfile='{fontfile}':"
-				f"text='%{{pts\\:hms}}.%{{eif:n}}':"
+				f"text='%{{pts\\:hms}}.%{{n}}':"
 				f"x=40:y=120:fontsize={max(8, self.font_size.value() - 12)}:fontcolor=yellow"
 			)
 			vf_parts.append(pts)
