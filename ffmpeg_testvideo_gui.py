@@ -98,7 +98,7 @@ class FFmpegTestVideoWindow(QMainWindow):
 
 		# ---------- Tab 1: Einstellungen ----------
 		tab1 = QWidget()
-		tabs.addTab(tab1, "Einstellungen")
+		tabs.addTab(tab1, "Video")
 		t1 = QVBoxLayout(tab1)
 
 		# Presets
@@ -185,6 +185,9 @@ class FFmpegTestVideoWindow(QMainWindow):
 		col.addWidget(QLabel("Hintergrund (FFmpeg color= / Quelle):"))
 		self.bg_edit = QLineEdit("black")
 		col.addWidget(self.bg_edit)
+		btn_vid_color = QPushButton("Farbe …")
+		btn_vid_color.clicked.connect(self.choose_vid_bg_color)
+		col.addWidget(btn_vid_color)
 
 		# Overlays / Timecode
 		ov = QHBoxLayout()
@@ -206,9 +209,17 @@ class FFmpegTestVideoWindow(QMainWindow):
 		font_layout = QHBoxLayout()
 		t1.addLayout(font_layout)
 
-		font_layout.addWidget(QLabel("Font-Datei (drawtext):"))
+		font_layout.addWidget(QLabel("Font:"))
 		self.font_edit = QLineEdit("C\\:/Windows/Fonts/arial.ttf")
 		font_layout.addWidget(self.font_edit)
+		btn_font = QPushButton("Font …")
+		btn_font.clicked.connect(lambda: self.choose_font(self.font_edit))
+		font_layout.addWidget(btn_font)
+		font_layout.addWidget(QLabel("Größe:"))
+		self.font_size = QSpinBox()
+		self.font_size.setRange(8, 300)
+		self.font_size.setValue(48)
+		font_layout.addWidget(self.font_size)
 
 		# Ausgabedatei
 		out = QHBoxLayout()
@@ -249,7 +260,7 @@ class FFmpegTestVideoWindow(QMainWindow):
 
 		# ---------- Tab 2: Forensik-Metadaten ----------
 		tab2 = QWidget()
-		tabs.addTab(tab2, "Metadaten")
+		tabs.addTab(tab2, "Metadaten - Video")
 		t2 = QVBoxLayout(tab2)
 
 		def meta_row(label, attr, default=""):
@@ -315,9 +326,17 @@ class FFmpegTestVideoWindow(QMainWindow):
 		# Font
 		ifont = QHBoxLayout()
 		t3.addLayout(ifont)
-		ifont.addWidget(QLabel("Font-Datei:"))
+		ifont.addWidget(QLabel("Font:"))
 		self.img_font = QLineEdit("C\\:/Windows/Fonts/arial.ttf")
 		ifont.addWidget(self.img_font)
+		btn_imgfont = QPushButton("Font …")
+		btn_imgfont.clicked.connect(lambda: self.choose_font(self.img_font))
+		ifont.addWidget(btn_imgfont)
+		ifont.addWidget(QLabel("Größe:"))
+		self.img_font_size = QSpinBox()
+		self.img_font_size.setRange(8, 300)
+		self.img_font_size.setValue(54)
+		ifont.addWidget(self.img_font_size)
 
 		# Ausgabe
 		io = QHBoxLayout()
@@ -459,7 +478,7 @@ class FFmpegTestVideoWindow(QMainWindow):
 				f"drawtext=fontfile='{fontfile}':"
 				f"timecode='00\\:00\\:00\\:00':"
 				f"r={fps}:"
-				f"x=40:y=40:fontsize=48:fontcolor=white"
+				f"x=40:y=40:fontsize={self.font_size.value()}:fontcolor=white"
 			)
 			vf_parts.append(tc)
 
@@ -467,7 +486,7 @@ class FFmpegTestVideoWindow(QMainWindow):
 			pts = (
 				f"drawtext=fontfile='{fontfile}':"
 				f"text='%{{pts\\:hms}}.%{{eif:n}}':"
-				f"x=40:y=120:fontsize=36:fontcolor=yellow"
+				f"x=40:y=120:fontsize={max(8, self.font_size.value() - 12)}:fontcolor=yellow"
 			)
 			vf_parts.append(pts)
 
@@ -569,6 +588,22 @@ class FFmpegTestVideoWindow(QMainWindow):
 		if path:
 			self.img_out.setText(path)
 
+	def choose_font(self, target_edit):
+		path, _ = QFileDialog.getOpenFileName(
+			self, "Font-Datei wählen",
+			"",
+			"Schriftarten (*.ttf *.otf);;Alle Dateien (*.*)"
+		)
+		if path:
+			target_edit.setText(path)
+
+	def choose_vid_bg_color(self):
+		color = QColorDialog.getColor(
+			QColor(self.bg_edit.text()), self, "Hintergrundfarbe"
+		)
+		if color.isValid():
+			self.bg_edit.setText(color.name())
+
 	def choose_img_bg_color(self):
 		color = QColorDialog.getColor(
 			QColor(self.img_bg.text()), self, "Hintergrundfarbe"
@@ -598,7 +633,7 @@ class FFmpegTestVideoWindow(QMainWindow):
 		else:
 			input_filter = f"color=c={bg}:s={w}x{h}:d=1"
 
-		fontsize = max(20, h // 20)
+		fontsize = self.img_font_size.value()
 		offset = fontsize // 2
 
 		vf = (
