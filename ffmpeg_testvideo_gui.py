@@ -2,6 +2,8 @@ import sys
 import shlex
 import subprocess
 import datetime
+import configparser
+from pathlib import Path
 
 from PyQt6.QtWidgets import (
 	QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -11,6 +13,8 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QColor
+
+INI_PATH = Path(__file__).parent / "video.ini"
 
 
 class FFmpegWorker(QThread):
@@ -367,6 +371,7 @@ class FFmpegTestVideoWindow(QMainWindow):
 
 		# Direkt ein sinnvolles Preset laden
 		self.apply_preset()
+		self._load_settings()
 
 	# ---------------- Presets ----------------
 
@@ -461,6 +466,7 @@ class FFmpegTestVideoWindow(QMainWindow):
 		duration = self.dur_spin.value()
 		source = self.bg_edit.text().strip()
 		fontfile = self.font_edit.text().strip()
+		fontfile_esc = fontfile.replace(":", "\\:")
 		output = self.out_edit.text().strip()
 		encoder_meta = self.encoder_edit.text().strip()
 
@@ -475,7 +481,7 @@ class FFmpegTestVideoWindow(QMainWindow):
 
 		if self.chk_timecode_overlay.isChecked():
 			tc = (
-				f"drawtext=fontfile='{fontfile}':"
+				f"drawtext=fontfile='{fontfile_esc}':"
 				f"timecode='00\\:00\\:00\\:00':"
 				f"r={fps}:"
 				f"x=40:y=40:fontsize={self.font_size.value()}:fontcolor=white"
@@ -484,7 +490,7 @@ class FFmpegTestVideoWindow(QMainWindow):
 
 		if self.chk_pts_overlay.isChecked():
 			pts = (
-				f"drawtext=fontfile='{fontfile}':"
+				f"drawtext=fontfile='{fontfile_esc}':"
 				f"text='%{{pts\\:hms}}.%{{n}}':"
 				f"x=40:y=120:fontsize={max(8, self.font_size.value() - 12)}:fontcolor=yellow"
 			)
@@ -553,6 +559,7 @@ class FFmpegTestVideoWindow(QMainWindow):
 	# ---------------- Start / Worker ----------------
 
 	def start_ffmpeg(self):
+		self._save_settings()
 		cmd, output = self.build_ffmpeg_command()
 		self.log_view.clear()
 		self.progress.setValue(0)
@@ -576,6 +583,48 @@ class FFmpegTestVideoWindow(QMainWindow):
 		self.btn_start.setEnabled(True)
 		self.statusBar().showMessage(f"Fehler: {msg}", 8000)
 		self.log_view.append(f"\nFEHLER: {msg}")
+
+	def closeEvent(self, event):
+		self._save_settings()
+		super().closeEvent(event)
+
+	def _save_settings(self):
+		ini = configparser.ConfigParser()
+		out_dir = str(Path(self.out_edit.text()).parent)
+		ini["Settings"] = {
+			"encoder": self.encoder_box.currentText(),
+			"font_path": self.font_edit.text(),
+			"font_size": str(self.font_size.value()),
+			"output_folder": out_dir,
+		}
+		try:
+			with open(INI_PATH, "w", encoding="utf-8") as f:
+				ini.write(f)
+		except Exception:
+			pass
+
+	def _load_settings(self):
+		if not INI_PATH.exists():
+			return
+		try:
+			ini = configparser.ConfigParser()
+			ini.read(INI_PATH, encoding="utf-8")
+			if "Settings" not in ini:
+				return
+			s = ini["Settings"]
+			if "encoder" in s:
+				idx = self.encoder_box.findText(s["encoder"])
+				if idx >= 0:
+					self.encoder_box.setCurrentIndex(idx)
+			if "font_path" in s:
+				self.font_edit.setText(s["font_path"])
+			if "font_size" in s:
+				self.font_size.setValue(int(s["font_size"]))
+			if "output_folder" in s and s["output_folder"].strip():
+				base = Path(self.out_edit.text()).name
+				self.out_edit.setText(str(Path(s["output_folder"].strip()) / base))
+		except Exception:
+			pass
 
 	# ---------------- Bild / Photo ----------------
 
@@ -617,11 +666,13 @@ class FFmpegTestVideoWindow(QMainWindow):
 		self.img_out.setText(f"{base}.{fmt}")
 
 	def generate_image(self):
+		self._save_settings()
 		fmt = self.img_format.currentText()
 		w = self.img_w.value()
 		h = self.img_h.value()
 		bg = self.img_bg.text().strip()
 		fontfile = self.img_font.text().strip()
+		fontfile_esc = fontfile.replace(":", "\\:")
 		output = self.img_out.text().strip()
 
 		date_str = datetime.datetime.now().strftime("%d.%m.%Y")
@@ -637,11 +688,11 @@ class FFmpegTestVideoWindow(QMainWindow):
 		offset = fontsize // 2
 
 		vf = (
-			f"drawtext=fontfile='{fontfile}':"
+			f"drawtext=fontfile='{fontfile_esc}':"
 			f"text='{date_str}':"
 			f"fontsize={fontsize}:fontcolor=white:"
 			f"x=(w-text_w)/2:y=(h-text_h)/2-{offset},"
-			f"drawtext=fontfile='{fontfile}':"
+			f"drawtext=fontfile='{fontfile_esc}':"
 			f"text='{time_esc}':"
 			f"fontsize={fontsize}:fontcolor=white:"
 			f"x=(w-text_w)/2:y=(h-text_h)/2+{offset}"
