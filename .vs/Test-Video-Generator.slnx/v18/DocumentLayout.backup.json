@@ -3,8 +3,8 @@
   "WorkspaceRootPath": "D:\\Gerds_Projekte\\source\\Test-Video-Generator\\",
   "Documents": [
     {
-      "AbsoluteMoniker": "D:0:0:{6BD4D630-E072-4655-A6D3-EF4CDB26FBAA}|Test-Video-Generator.pyproj|D:\\Gerds_Projekte\\source\\Test-Video-Generator\\ffmpeg_testvideo_gui.py||{8B382828-6202-11D1-8870-0000F87579D2}",
-      "RelativeMoniker": "D:0:0:{6BD4D630-E072-4655-A6D3-EF4CDB26FBAA}|Test-Video-Generator.pyproj|solutionrelative:ffmpeg_testvideo_gui.py||{8B382828-6202-11D1-8870-0000F87579D2}"
+      "AbsoluteMoniker": "D:0:0:{6BD4D630-E072-4655-A6D3-EF4CDB26FBAA}|Test-Video-Generator.pyproj|D:\\Gerds_Projekte\\source\\Test-Video-Generator\\main.py||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{6BD4D630-E072-4655-A6D3-EF4CDB26FBAA}|Test-Video-Generator.pyproj|solutionrelative:main.py||{8B382828-6202-11D1-8870-0000F87579D2}"
     }
   ],
   "DocumentGroupContainers": [
@@ -31,14 +31,14 @@
             {
               "$type": "Document",
               "DocumentIndex": 0,
-              "Title": "ffmpeg_testvideo_gui.py",
-              "DocumentMoniker": "D:\\Gerds_Projekte\\source\\Test-Video-Generator\\ffmpeg_testvideo_gui.py",
-              "RelativeDocumentMoniker": "ffmpeg_testvideo_gui.py",
-              "ToolTip": "D:\\Gerds_Projekte\\source\\Test-Video-Generator\\ffmpeg_testvideo_gui.py",
-              "RelativeToolTip": "ffmpeg_testvideo_gui.py",
-              "ViewState": "AgIAAHIAAAAAAAAAAAAQwIEAAAAAAAAAAAAAAA==",
+              "Title": "main.py",
+              "DocumentMoniker": "D:\\Gerds_Projekte\\source\\Test-Video-Generator\\main.py",
+              "RelativeDocumentMoniker": "main.py",
+              "ToolTip": "D:\\Gerds_Projekte\\source\\Test-Video-Generator\\main.py",
+              "RelativeToolTip": "main.py",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
-              "WhenOpened": "2026-06-21T12:25:05.013Z",
+              "WhenOpened": "2026-06-25T20:31:16.473Z",
               "EditorCaption": ""
             }
           ]
