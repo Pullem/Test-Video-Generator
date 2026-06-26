@@ -229,7 +229,7 @@ class ImageCommandBuilder:
 			"-update", "1",
 		]
 
-		meta_time = params.meta_creation_time or datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+		meta_time = params.meta_creation_time or datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
 		if meta_time:
 			cmd += ["-metadata", f"creation_time={meta_time}"]
 		if params.meta_title:
