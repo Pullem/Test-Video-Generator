@@ -429,6 +429,17 @@ class MainWindow(QMainWindow):
 			base = Path(self.out_edit.text()).name
 			self.out_edit.setText(str(Path(settings["output_folder"].strip()) / base))
 
+		def _bool(key: str, default: bool = True) -> bool:
+			v = settings.get(key)
+			if v is None:
+				return default
+			return v.lower() in ("1", "true", "yes")
+
+		self.chk_timecode_overlay.setChecked(_bool("timecode_overlay"))
+		self.chk_pts_overlay.setChecked(_bool("pts_overlay"))
+		self.chk_datetime_overlay.setChecked(_bool("datetime_overlay", False))
+		self.chk_container_timecode.setChecked(_bool("container_timecode"))
+
 	def collect_settings_from_ui(self) -> dict:
 		from pathlib import Path
 		return {
@@ -436,6 +447,10 @@ class MainWindow(QMainWindow):
 			"font_path": self.font_edit.text(),
 			"font_size": str(self.font_size.value()),
 			"output_folder": str(Path(self.out_edit.text()).parent),
+			"timecode_overlay": "1" if self.chk_timecode_overlay.isChecked() else "0",
+			"pts_overlay": "1" if self.chk_pts_overlay.isChecked() else "0",
+			"datetime_overlay": "1" if self.chk_datetime_overlay.isChecked() else "0",
+			"container_timecode": "1" if self.chk_container_timecode.isChecked() else "0",
 		}
 
 	# ---------- Dialoge ----------
