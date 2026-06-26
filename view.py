@@ -4,7 +4,7 @@ from PyQt6.QtWidgets import (
 	QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
 	QLabel, QLineEdit, QSpinBox, QCheckBox, QPushButton,
 	QFileDialog, QColorDialog, QProgressBar,
-	QTextEdit, QComboBox, QTabWidget
+	QTextEdit, QComboBox, QTabWidget, QGroupBox, QFormLayout
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QColor
@@ -29,7 +29,6 @@ class MainWindow(QMainWindow):
 		root_layout.addWidget(tabs)
 
 		self._build_video_tab(tabs)
-		self._build_metadata_tab(tabs)
 		self._build_image_tab(tabs)
 
 		self.worker = None
@@ -156,6 +155,33 @@ class MainWindow(QMainWindow):
 		self.encoder_edit = QLineEdit("FFmpeg Testvideo Generator")
 		meta.addWidget(self.encoder_edit)
 
+		meta_box = QGroupBox("Metadaten")
+		mg = QFormLayout(meta_box)
+		self.meta_title = QLineEdit("Forensik-Testvideo")
+		mg.addRow("Titel:", self.meta_title)
+		self.meta_artist = QLineEdit()
+		mg.addRow("Ersteller:", self.meta_artist)
+		self.meta_copyright = QLineEdit()
+		mg.addRow("Copyright:", self.meta_copyright)
+		self.meta_description = QLineEdit()
+		mg.addRow("Beschreibung:", self.meta_description)
+		self.meta_language = QLineEdit("ger")
+		mg.addRow("Sprache:", self.meta_language)
+		self.meta_show = QLineEdit()
+		mg.addRow("Projekt / Fall:", self.meta_show)
+		self.meta_episode_id = QLineEdit()
+		mg.addRow("Testfall-ID:", self.meta_episode_id)
+		self.meta_genre = QLineEdit("Forensic Test")
+		mg.addRow("Genre:", self.meta_genre)
+		self.meta_comment = QLineEdit()
+		mg.addRow("Kommentar:", self.meta_comment)
+		now_def = datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+		self.meta_creation_time = QLineEdit(now_def)
+		mg.addRow("creation_time:", self.meta_creation_time)
+		self.meta_date = QLineEdit()
+		mg.addRow("date:", self.meta_date)
+		t1.addWidget(meta_box)
+
 		self.progress = QProgressBar()
 		self.progress.setRange(0, 100)
 		t1.addWidget(self.progress)
@@ -168,36 +194,6 @@ class MainWindow(QMainWindow):
 		self.log_view = QTextEdit()
 		self.log_view.setReadOnly(True)
 		t1.addWidget(self.log_view)
-
-	# ---------- Metadaten-Tab ----------
-
-	def _build_metadata_tab(self, tabs):
-		tab2 = QWidget()
-		tabs.addTab(tab2, "Metadaten - Video")
-		t2 = QVBoxLayout(tab2)
-
-		def meta_row(label, attr, default=""):
-			row = QHBoxLayout()
-			t2.addLayout(row)
-			row.addWidget(QLabel(label))
-			edit = QLineEdit(default)
-			setattr(self, attr, edit)
-			row.addWidget(edit)
-
-		meta_row("Titel:", "meta_title", "Forensik-Testvideo")
-		meta_row("Ersteller:", "meta_artist")
-		meta_row("Copyright:", "meta_copyright")
-		meta_row("Beschreibung:", "meta_description")
-		meta_row("Sprache:", "meta_language", "ger")
-		meta_row("Projekt / Fall:", "meta_show")
-		meta_row("Testfall-ID:", "meta_episode_id")
-		meta_row("Genre:", "meta_genre", "Forensic Test")
-		meta_row("Kommentar:", "meta_comment")
-
-		t2.addWidget(QLabel("── Datum / Zeit ──"))
-		now_default = datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-		meta_row("creation_time:", "meta_creation_time", now_default)
-		meta_row("date:", "meta_date")
 
 	# ---------- Bild-Tab ----------
 
@@ -258,6 +254,21 @@ class MainWindow(QMainWindow):
 		btn_img_browse.clicked.connect(self._choose_img_output)
 		io.addWidget(btn_img_browse)
 
+		img_meta = QGroupBox("Metadaten")
+		g = QFormLayout(img_meta)
+		self.img_meta_title = QLineEdit()
+		g.addRow("Titel:", self.img_meta_title)
+		self.img_meta_artist = QLineEdit()
+		g.addRow("Künstler:", self.img_meta_artist)
+		self.img_meta_copyright = QLineEdit()
+		g.addRow("Copyright:", self.img_meta_copyright)
+		self.img_meta_comment = QLineEdit()
+		g.addRow("Kommentar:", self.img_meta_comment)
+		now_def = datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+		self.img_meta_ctime = QLineEdit(now_def)
+		g.addRow("creation_time:", self.img_meta_ctime)
+		t3.addWidget(img_meta)
+
 		self.img_format.currentTextChanged.connect(self._update_img_extension)
 
 		self.img_btn = QPushButton("Bild erzeugen")
@@ -304,6 +315,22 @@ class MainWindow(QMainWindow):
 			meta_comment=self.meta_comment.text().strip(),
 			meta_creation_time=self.meta_creation_time.text().strip(),
 			meta_date=self.meta_date.text().strip(),
+		)
+
+	def get_image_params(self) -> "ImageParams":
+		from model import ImageParams
+		return ImageParams(
+			width=self.img_w.value(),
+			height=self.img_h.value(),
+			source=self.img_bg.text().strip(),
+			fontfile=self.img_font.text().strip(),
+			font_size=self.img_font_size.value(),
+			output=self.img_out.text().strip(),
+			meta_title=self.img_meta_title.text().strip(),
+			meta_artist=self.img_meta_artist.text().strip(),
+			meta_copyright=self.img_meta_copyright.text().strip(),
+			meta_comment=self.img_meta_comment.text().strip(),
+			meta_creation_time=self.img_meta_ctime.text().strip(),
 		)
 
 	def apply_preset(self):

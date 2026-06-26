@@ -50,6 +50,11 @@ class ImageParams:
 	fontfile: str = "C\\:/Windows/Fonts/arial.ttf"
 	font_size: int = 54
 	output: str = "testbild.png"
+	meta_title: str = ""
+	meta_artist: str = ""
+	meta_copyright: str = ""
+	meta_comment: str = ""
+	meta_creation_time: str = ""
 
 
 # ---------- Settings ----------
@@ -216,14 +221,28 @@ class ImageCommandBuilder:
 			f"x=(w-text_w)/2:y=(h-text_h)/2+{offset}"
 		)
 
-		return [
+		cmd = [
 			"ffmpeg", "-y",
 			"-f", "lavfi", "-i", input_filter,
 			"-vf", vf,
 			"-frames:v", "1",
 			"-update", "1",
-			params.output,
 		]
+
+		meta_time = params.meta_creation_time or datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+		if meta_time:
+			cmd += ["-metadata", f"creation_time={meta_time}"]
+		if params.meta_title:
+			cmd += ["-metadata", f"title={params.meta_title}"]
+		if params.meta_artist:
+			cmd += ["-metadata", f"artist={params.meta_artist}"]
+		if params.meta_copyright:
+			cmd += ["-metadata", f"copyright={params.meta_copyright}"]
+		if params.meta_comment:
+			cmd += ["-metadata", f"comment={params.meta_comment}"]
+
+		cmd.append(params.output)
+		return cmd
 
 
 # ---------- Worker-Threads ----------

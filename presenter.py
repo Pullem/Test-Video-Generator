@@ -1,7 +1,6 @@
 from model import (
 	VideoCommandBuilder, ImageCommandBuilder,
 	SettingsManager, FFmpegWorker, ImageWorker,
-	ImageParams,
 )
 
 
@@ -48,14 +47,7 @@ class Presenter:
 		self.view.show_video_error(msg)
 
 	def _on_generate_image(self):
-		params = ImageParams(
-			width=self.view.img_w.value(),
-			height=self.view.img_h.value(),
-			source=self.view.img_bg.text().strip(),
-			fontfile=self.view.img_font.text().strip(),
-			font_size=self.view.img_font_size.value(),
-			output=self.view.img_out.text().strip(),
-		)
+		params = self.view.get_image_params()
 
 		self.view.clear_img_log()
 		self.view.set_img_status("")
