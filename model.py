@@ -122,11 +122,24 @@ class VideoCommandBuilder:
 			vf_parts.append(pts)
 
 		if params.datetime_overlay:
-			date_str = datetime.datetime.now().strftime("%d.%m.%Y")
-			time_str = datetime.datetime.now().strftime("%H:%M:%S")
-			time_esc = time_str.replace(":", "\\:")
+			ct = params.meta_creation_time
+			try:
+				dt = datetime.datetime.fromisoformat(ct)
+			except (ValueError, TypeError):
+				dt = datetime.datetime.now()
+			date_str = dt.strftime("%d.%m.%Y")
+			start_str = dt.strftime("%H:%M:%S")
+			dur_mm = params.duration // 60
+			dur_ss = params.duration % 60
+			dur_str = f"{dur_mm:02d}:{dur_ss:02d}"
+			end_dt = dt + datetime.timedelta(seconds=params.duration)
+			end_str = end_dt.strftime("%H:%M:%S")
+			start_esc = start_str.replace(":", "\\:")
+			dur_esc = dur_str.replace(":", "\\:")
+			end_esc = end_str.replace(":", "\\:")
 			fs = params.font_size
 			off = fs // 2
+			fs_small = max(8, fs - 6)
 			vf_parts.append(
 				f"drawtext=fontfile='{fontfile_esc}':"
 				f"text='{date_str}':"
@@ -135,8 +148,8 @@ class VideoCommandBuilder:
 			)
 			vf_parts.append(
 				f"drawtext=fontfile='{fontfile_esc}':"
-				f"text='{time_esc}':"
-				f"fontsize={fs}:fontcolor=white:"
+				f"text='{start_esc}  +  {dur_esc}  ->  {end_esc}':"
+				f"fontsize={fs_small}:fontcolor=white:"
 				f"x=(w-text_w)/2:y=(h-text_h)/2+{off}"
 			)
 
