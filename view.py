@@ -180,6 +180,8 @@ class MainWindow(QMainWindow):
 		mg.addRow("creation_time:", self.meta_creation_time)
 		self.meta_date = QLineEdit()
 		mg.addRow("date:", self.meta_date)
+		self.meta_location = QLineEdit("+49.1234+008.5678/")
+		mg.addRow("GPS (ISO 6709):", self.meta_location)
 		t1.addWidget(meta_box)
 
 		self.progress = QProgressBar()
@@ -267,6 +269,8 @@ class MainWindow(QMainWindow):
 		now_def = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
 		self.img_meta_ctime = QLineEdit(now_def)
 		g.addRow("creation_time:", self.img_meta_ctime)
+		self.img_meta_location = QLineEdit("+49.1234+008.5678/")
+		g.addRow("GPS (ISO 6709):", self.img_meta_location)
 		t3.addWidget(img_meta)
 
 		self.img_format.currentTextChanged.connect(self._update_img_extension)
@@ -315,6 +319,7 @@ class MainWindow(QMainWindow):
 			meta_comment=self.meta_comment.text().strip(),
 			meta_creation_time=self.meta_creation_time.text().strip(),
 			meta_date=self.meta_date.text().strip(),
+			meta_location=self.meta_location.text().strip(),
 		)
 
 	def get_image_params(self) -> "ImageParams":
@@ -331,6 +336,7 @@ class MainWindow(QMainWindow):
 			meta_copyright=self.img_meta_copyright.text().strip(),
 			meta_comment=self.img_meta_comment.text().strip(),
 			meta_creation_time=self.img_meta_ctime.text().strip(),
+			meta_location=self.img_meta_location.text().strip(),
 		)
 
 	def apply_preset(self):

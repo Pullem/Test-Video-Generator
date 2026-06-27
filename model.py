@@ -8,6 +8,40 @@ from typing import Optional
 from PyQt6.QtCore import QThread, pyqtSignal
 
 
+# ---------- GPS-Hilfsfunktion ----------
+
+def _parse_iso6709(coords: str) -> list[tuple[str, str]]:
+	"""Parst "+49.1234+008.5678/" → EXIF-Metadaten-Liste."""
+	try:
+		import re
+		m = re.match(r"([+-]\d+\.?\d*)([+-]\d+\.?\d*)/?", coords.strip())
+		if not m:
+			return []
+		lat = float(m.group(1))
+		lon = float(m.group(2))
+	except (ValueError, TypeError):
+		return []
+
+	def _to_dms(deg: float) -> tuple[int, int, int]:
+		d = int(abs(deg))
+		mf = (abs(deg) - d) * 60
+		mi = int(mf)
+		sf = (mf - mi) * 60
+		return d, mi, int(round(sf * 100))  # 2 Nachkommastellen als Rational
+
+	lat_ref = "N" if lat >= 0 else "S"
+	lat_d, lat_m, lat_s = _to_dms(lat)
+	lon_ref = "E" if lon >= 0 else "W"
+	lon_d, lon_m, lon_s = _to_dms(lon)
+
+	return [
+		("GPSLatitudeRef", lat_ref),
+		("GPSLatitude", f"{lat_d}/1 {lat_m}/1 {lat_s}/100"),
+		("GPSLongitudeRef", lon_ref),
+		("GPSLongitude", f"{lon_d}/1 {lon_m}/1 {lon_s}/100"),
+	]
+
+
 # ---------- Datenklassen ----------
 
 @dataclass
@@ -40,6 +74,7 @@ class VideoParams:
 	meta_comment: str = ""
 	meta_creation_time: str = ""
 	meta_date: str = ""
+	meta_location: str = ""
 
 
 @dataclass
@@ -55,6 +90,7 @@ class ImageParams:
 	meta_copyright: str = ""
 	meta_comment: str = ""
 	meta_creation_time: str = ""
+	meta_location: str = ""
 
 
 # ---------- Settings ----------
@@ -197,10 +233,13 @@ class VideoCommandBuilder:
 			("genre", params.meta_genre),
 			("comment", params.meta_comment),
 			("date", params.meta_date),
+			("location", params.meta_location),
 		]
 		for key, val in meta_map:
 			if val:
 				cmd += ["-metadata", f"{key}={val}"]
+		if params.meta_location:
+			cmd += ["-metadata", f"location-eng={params.meta_location}"]
 
 		cmd.append(params.output)
 		return cmd
@@ -253,6 +292,10 @@ class ImageCommandBuilder:
 			cmd += ["-metadata", f"copyright={params.meta_copyright}"]
 		if params.meta_comment:
 			cmd += ["-metadata", f"comment={params.meta_comment}"]
+		if params.meta_location:
+			cmd += ["-metadata", f"location={params.meta_location}"]
+			for key, val in _parse_iso6709(params.meta_location):
+				cmd += ["-metadata", f"{key}={val}"]
 
 		cmd.append(params.output)
 		return cmd
