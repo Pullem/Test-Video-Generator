@@ -1,6 +1,7 @@
 from model import (
 	VideoCommandBuilder, ImageCommandBuilder,
 	SettingsManager, FFmpegWorker, ImageWorker,
+	set_file_creation_time,
 )
 
 
@@ -9,6 +10,8 @@ class Presenter:
 		self.view = view
 		self._video_worker = None
 		self._image_worker = None
+		self._pending_video_ctime = ""
+		self._pending_image_ctime = ""
 
 		# View-Signale verbinden
 		self.view.video_start_requested.connect(self._on_start_video)
@@ -22,6 +25,7 @@ class Presenter:
 
 	def _on_start_video(self):
 		params = self.view.get_video_params()
+		self._pending_video_ctime = params.meta_creation_time
 
 		self.view.clear_video_log()
 		self.view.set_video_progress(0)
@@ -39,15 +43,19 @@ class Presenter:
 		SettingsManager.save(self.view.collect_settings_from_ui())
 
 	def _on_video_finished(self, path: str):
+		set_file_creation_time(path, self._pending_video_ctime)
+		self._pending_video_ctime = ""
 		self.view.set_video_controls_enabled(True)
 		self.view.show_video_finished(path)
 
 	def _on_video_error(self, msg: str):
+		self._pending_video_ctime = ""
 		self.view.set_video_controls_enabled(True)
 		self.view.show_video_error(msg)
 
 	def _on_generate_image(self):
 		params = self.view.get_image_params()
+		self._pending_image_ctime = params.meta_creation_time
 
 		self.view.clear_img_log()
 		self.view.set_img_status("")
@@ -64,9 +72,12 @@ class Presenter:
 		SettingsManager.save(self.view.collect_settings_from_ui())
 
 	def _on_image_finished(self, path: str):
+		set_file_creation_time(path, self._pending_image_ctime)
+		self._pending_image_ctime = ""
 		self.view.set_img_controls_enabled(True)
 		self.view.show_img_finished(path)
 
 	def _on_image_error(self, msg: str):
+		self._pending_image_ctime = ""
 		self.view.set_img_controls_enabled(True)
 		self.view.show_img_error(msg)

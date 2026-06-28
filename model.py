@@ -1,6 +1,7 @@
 import subprocess
 import datetime
 import configparser
+import sys
 from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Optional
@@ -40,6 +41,22 @@ def _parse_iso6709(coords: str) -> list[tuple[str, str]]:
 		("GPSLongitudeRef", lon_ref),
 		("GPSLongitude", f"{lon_d}/1 {lon_m}/1 {lon_s}/100"),
 	]
+
+
+def set_file_creation_time(path: str, creation_time_str: str):
+	"""Setzt die Datei-Erstellungszeit auf Windows via PowerShell."""
+	if not sys.platform == "win32" or not creation_time_str:
+		return
+	try:
+		dt = datetime.datetime.fromisoformat(creation_time_str)
+	except (ValueError, TypeError):
+		return
+	ps_cmd = (
+		f"$(Get-Item '{path}').CreationTime = Get-Date "
+		f"'{dt.strftime('%Y-%m-%dT%H:%M:%S')}'"
+	)
+	subprocess.run(["powershell", "-NoProfile", ps_cmd],
+				   capture_output=True, text=True)
 
 
 # ---------- Datenklassen ----------
@@ -215,8 +232,6 @@ class VideoCommandBuilder:
 		if params.bitrate:
 			cmd += ["-b:v", params.bitrate]
 
-		if params.meta_creation_time:
-			cmd += ["-metadata", f"creation_time={params.meta_creation_time}"]
 		if params.encoder_meta:
 			cmd += ["-metadata", f"encoder={params.encoder_meta}"]
 		if params.container_timecode:
@@ -281,9 +296,6 @@ class ImageCommandBuilder:
 			"-update", "1",
 		]
 
-		meta_time = params.meta_creation_time or datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-		if meta_time:
-			cmd += ["-metadata", f"creation_time={meta_time}"]
 		if params.meta_title:
 			cmd += ["-metadata", f"title={params.meta_title}"]
 		if params.meta_artist:
