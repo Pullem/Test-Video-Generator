@@ -44,19 +44,44 @@ def _parse_iso6709(coords: str) -> list[tuple[str, str]]:
 
 
 def set_file_creation_time(path: str, creation_time_str: str):
-	"""Setzt die Datei-Erstellungszeit auf Windows via PowerShell."""
-	if not sys.platform == "win32" or not creation_time_str:
+	"""Setzt die Datei-Erstellungszeit auf Windows (creation_time als Lokalzeit)."""
+	if sys.platform != "win32" or not creation_time_str:
 		return
 	try:
-		dt = datetime.datetime.fromisoformat(creation_time_str)
+		dt_local = datetime.datetime.fromisoformat(creation_time_str)
 	except (ValueError, TypeError):
 		return
-	ps_cmd = (
-		f"$(Get-Item '{path}').CreationTime = Get-Date "
-		f"'{dt.strftime('%Y-%m-%dT%H:%M:%S')}'"
+	if dt_local.tzinfo is None:
+		dt_local = dt_local.replace(tzinfo=datetime.datetime.now().astimezone().tzinfo)
+	dt_utc = dt_local.astimezone(datetime.timezone.utc)
+	epoch = datetime.datetime(1601, 1, 1, tzinfo=datetime.timezone.utc)
+	ft = int((dt_utc - epoch).total_seconds() * 10_000_000)
+
+	import ctypes
+	from ctypes import wintypes
+
+	kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+
+	handle = kernel32.CreateFileW(
+		path,
+		0x100,                    # FILE_WRITE_ATTRIBUTES
+		0x7,                      # FILE_SHARE_READ|WRITE|DELETE
+		None,
+		3,                        # OPEN_EXISTING
+		0,
+		None,
 	)
-	subprocess.run(["powershell", "-NoProfile", ps_cmd],
-				   capture_output=True, text=True)
+	if handle in (wintypes.HANDLE(-1).value, wintypes.HANDLE(0).value, None):
+		return
+
+	try:
+		class FILETIME(ctypes.Structure):
+			_fields_ = [("dwLowDateTime", wintypes.DWORD),
+						("dwHighDateTime", wintypes.DWORD)]
+		ft_s = FILETIME(ft & 0xFFFFFFFF, ft >> 32)
+		kernel32.SetFileTime(handle, ctypes.byref(ft_s), None, None)
+	finally:
+		kernel32.CloseHandle(handle)
 
 
 # ---------- Datenklassen ----------
