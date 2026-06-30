@@ -257,6 +257,8 @@ class VideoCommandBuilder:
 		if params.bitrate:
 			cmd += ["-b:v", params.bitrate]
 
+		if params.meta_creation_time:
+			cmd += ["-metadata", f"creation_time={params.meta_creation_time}"]
 		if params.encoder_meta:
 			cmd += ["-metadata", f"encoder={params.encoder_meta}"]
 		if params.container_timecode:
@@ -321,6 +323,9 @@ class ImageCommandBuilder:
 			"-update", "1",
 		]
 
+		meta_time = params.meta_creation_time or datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+		if meta_time:
+			cmd += ["-metadata", f"creation_time={meta_time}"]
 		if params.meta_title:
 			cmd += ["-metadata", f"title={params.meta_title}"]
 		if params.meta_artist:
