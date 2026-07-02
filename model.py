@@ -291,8 +291,14 @@ class ImageCommandBuilder:
 	@staticmethod
 	def build(params: ImageParams) -> list[str]:
 		fontfile_esc = params.fontfile.replace(":", "\\:")
-		date_str = datetime.datetime.now().strftime("%d.%m.%Y")
-		time_str = datetime.datetime.now().strftime("%H:%M:%S")
+
+		ct = params.meta_creation_time
+		try:
+			dt = datetime.datetime.fromisoformat(ct)
+		except (ValueError, TypeError):
+			dt = datetime.datetime.now()
+		date_str = dt.strftime("%d.%m.%Y")
+		time_str = dt.strftime("%H:%M:%S")
 		time_esc = time_str.replace(":", "\\:")
 
 		source_lower = params.source.lower()
