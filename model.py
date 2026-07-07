@@ -135,6 +135,29 @@ class ImageParams:
 	meta_location: str = ""
 
 
+@dataclass
+class WriteFileEntry:
+	source: str
+	creation_time: str
+
+
+@dataclass
+class WriteParams:
+	files: list[WriteFileEntry] = field(default_factory=list)
+	meta_title: str = "Forensik-Testvideo"
+	meta_artist: str = ""
+	meta_copyright: str = ""
+	meta_description: str = ""
+	meta_language: str = "ger"
+	meta_show: str = ""
+	meta_episode_id: str = ""
+	meta_genre: str = "Forensic Test"
+	meta_comment: str = ""
+	meta_creation_time: str = ""
+	meta_date: str = ""
+	meta_location: str = ""
+
+
 # ---------- Settings ----------
 
 INI_PATH = Path(__file__).parent / "video.ini"
@@ -349,6 +372,46 @@ class ImageCommandBuilder:
 		return cmd
 
 
+class WriteCommandBuilder:
+	@staticmethod
+	def build(source: str, entry: WriteFileEntry, params: WriteParams
+			  ) -> tuple[list[str], str]:
+		p = Path(source)
+		temp = p.with_stem(p.stem + "_tmp_w")
+		cmd = ["ffmpeg", "-y", "-i", source, "-c", "copy", "-map", "0"]
+
+		if entry.creation_time:
+			ct = entry.creation_time
+			cmd += ["-metadata", f"creation_time={ct}"]
+			cmd += ["-metadata:s:v:0", f"creation_time={ct}"]
+			cmd += ["-metadata:s:a:0", f"creation_time={ct}"]
+			cmd += ["-metadata:s:t:0", f"creation_time={ct}"]
+
+		meta_map = [
+			("title", params.meta_title),
+			("artist", params.meta_artist),
+			("copyright", params.meta_copyright),
+			("description", params.meta_description),
+			("language", params.meta_language),
+			("show", params.meta_show),
+			("episode_id", params.meta_episode_id),
+			("genre", params.meta_genre),
+			("comment", params.meta_comment),
+			("date", params.meta_date),
+			("location", params.meta_location),
+		]
+		for key, val in meta_map:
+			if val:
+				cmd += ["-metadata", f"{key}={val}"]
+		if params.meta_location:
+			cmd += ["-metadata", f"location-eng={params.meta_location}"]
+			for key, val in _parse_iso6709(params.meta_location):
+				cmd += ["-metadata", f"{key}={val}"]
+
+		cmd.append(str(temp))
+		return cmd, str(temp)
+
+
 # ---------- Worker-Threads ----------
 
 class FFmpegWorker(QThread):
@@ -416,3 +479,39 @@ class ImageWorker(QThread):
 				self.finished_error.emit(f"FFmpeg Rückgabecode: {ret}")
 		except Exception as e:
 			self.finished_error.emit(str(e))
+
+
+class WriteWorker(QThread):
+	log_line = pyqtSignal(str)
+	finished_ok = pyqtSignal()
+	finished_error = pyqtSignal(str)
+	file_done = pyqtSignal(int, str)
+
+	def __init__(self, jobs: list[tuple[list[str], str, str]]):
+		super().__init__()
+		self.jobs = jobs
+
+	def run(self):
+		for i, (cmd, src, ctime) in enumerate(self.jobs):
+			try:
+				self.log_line.emit(f"[{i+1}/{len(self.jobs)}] {src}")
+				self.log_line.emit(" ".join(cmd))
+				proc = subprocess.Popen(
+					cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+					text=True, bufsize=1,
+				)
+				for line in proc.stdout:
+					self.log_line.emit(line.rstrip())
+				ret = proc.wait()
+				if ret != 0:
+					self.finished_error.emit(f"FFmpeg Fehler ({src}), Code {ret}")
+					return
+				temp = Path(cmd[-1])
+				orig = Path(src)
+				temp.replace(orig)
+				set_file_creation_time(src, ctime)
+				self.file_done.emit(i, src)
+			except Exception as e:
+				self.finished_error.emit(str(e))
+				return
+		self.finished_ok.emit()

@@ -1,5 +1,7 @@
 from model import (
 	VideoCommandBuilder, ImageCommandBuilder,
+	WriteCommandBuilder, WriteWorker,
+	WriteFileEntry,
 	SettingsManager, FFmpegWorker, ImageWorker,
 	set_file_creation_time,
 )
@@ -10,12 +12,14 @@ class Presenter:
 		self.view = view
 		self._video_worker = None
 		self._image_worker = None
+		self._write_worker = None
 		self._pending_video_ctime = ""
 		self._pending_image_ctime = ""
 
 		# View-Signale verbinden
 		self.view.video_start_requested.connect(self._on_start_video)
 		self.view.image_generate_requested.connect(self._on_generate_image)
+		self.view.write_start_requested.connect(self._on_write)
 		self.view.btn_apply_preset.clicked.connect(self.view.apply_preset)
 
 		# Settings laden
@@ -81,3 +85,36 @@ class Presenter:
 		self._pending_image_ctime = ""
 		self.view.set_img_controls_enabled(True)
 		self.view.show_img_error(msg)
+
+	def _on_write(self):
+		entries = self.view.get_write_files()
+		if not entries:
+			return
+		meta = self.view.get_write_meta()
+
+		self.view.clear_write_log()
+		self.view.set_write_controls_enabled(False)
+
+		jobs = []
+		for src, ct in entries:
+			entry = WriteFileEntry(source=src, creation_time=ct)
+			cmd, temp = WriteCommandBuilder.build(src, entry, meta)
+			jobs.append((cmd, src, ct))
+
+		self._write_worker = WriteWorker(jobs)
+		self._write_worker.log_line.connect(self.view.append_write_log)
+		self._write_worker.file_done.connect(self._on_write_file_done)
+		self._write_worker.finished_ok.connect(self._on_write_finished)
+		self._write_worker.finished_error.connect(self._on_write_error)
+		self._write_worker.start()
+
+	def _on_write_file_done(self, index: int, path: str):
+		self.view.append_write_log(f"✅ {path}")
+
+	def _on_write_finished(self):
+		self.view.set_write_controls_enabled(True)
+		self.view.append_write_log("✅ Alle Dateien verarbeitet.")
+
+	def _on_write_error(self, msg: str):
+		self.view.set_write_controls_enabled(True)
+		self.view.append_write_log(f"❌ {msg}")

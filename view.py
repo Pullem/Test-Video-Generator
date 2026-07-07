@@ -4,7 +4,9 @@ from PyQt6.QtWidgets import (
 	QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
 	QLabel, QLineEdit, QSpinBox, QCheckBox, QPushButton,
 	QFileDialog, QColorDialog, QProgressBar,
-	QTextEdit, QComboBox, QTabWidget, QGroupBox, QFormLayout
+	QTextEdit, QComboBox, QTabWidget, QGroupBox, QFormLayout,
+	QTableWidget, QTableWidgetItem, QHeaderView,
+	QAbstractItemView,
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QColor
@@ -15,6 +17,7 @@ from model import VideoParams, ImageParams
 class MainWindow(QMainWindow):
 	video_start_requested = pyqtSignal()
 	image_generate_requested = pyqtSignal()
+	write_start_requested = pyqtSignal()
 
 	def __init__(self):
 		super().__init__()
@@ -30,6 +33,7 @@ class MainWindow(QMainWindow):
 
 		self._build_video_tab(tabs)
 		self._build_image_tab(tabs)
+		self._build_write_tab(tabs)
 
 		self.worker = None
 		self.img_worker = None
@@ -286,6 +290,149 @@ class MainWindow(QMainWindow):
 		self.img_log = QTextEdit()
 		self.img_log.setReadOnly(True)
 		t3.addWidget(self.img_log)
+
+	# ---------- Write-Tab ----------
+
+	def _build_write_tab(self, tabs):
+		tab4 = QWidget()
+		tabs.addTab(tab4, "Write")
+		t4 = QVBoxLayout(tab4)
+
+		base_row = QHBoxLayout()
+		t4.addLayout(base_row)
+		base_row.addWidget(QLabel("Basis creation_time:"))
+		now_def = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+		self.write_base_time = QLineEdit(now_def)
+		base_row.addWidget(self.write_base_time)
+		base_row.addWidget(QLabel("Offset (Sek.):"))
+		self.write_offset = QSpinBox()
+		self.write_offset.setRange(0, 3600)
+		self.write_offset.setValue(30)
+		self.write_offset.setSuffix(" s")
+		base_row.addWidget(self.write_offset)
+
+		btn_row = QHBoxLayout()
+		t4.addLayout(btn_row)
+		btn_add = QPushButton("Dateien hinzufügen")
+		btn_add.clicked.connect(self._write_add_files)
+		btn_row.addWidget(btn_add)
+		btn_clear = QPushButton("Alle entfernen")
+		btn_clear.clicked.connect(self._write_clear)
+		btn_row.addWidget(btn_clear)
+
+		self.write_table = QTableWidget(0, 2)
+		self.write_table.setHorizontalHeaderLabels(["Dateipfad", "Erstellungszeit"])
+		self.write_table.horizontalHeader().setStretchLastSection(False)
+		self.write_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+		self.write_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+		self.write_table.itemChanged.connect(self._write_on_item_changed)
+		t4.addWidget(self.write_table)
+
+		wmeta = QGroupBox("Metadaten")
+		wg = QFormLayout(wmeta)
+		self.write_meta_title = QLineEdit("Forensik-Testvideo")
+		wg.addRow("Titel:", self.write_meta_title)
+		self.write_meta_artist = QLineEdit()
+		wg.addRow("Ersteller:", self.write_meta_artist)
+		self.write_meta_copyright = QLineEdit()
+		wg.addRow("Copyright:", self.write_meta_copyright)
+		self.write_meta_description = QLineEdit()
+		wg.addRow("Beschreibung:", self.write_meta_description)
+		self.write_meta_language = QLineEdit("ger")
+		wg.addRow("Sprache:", self.write_meta_language)
+		self.write_meta_show = QLineEdit()
+		wg.addRow("Projekt / Fall:", self.write_meta_show)
+		self.write_meta_episode_id = QLineEdit()
+		wg.addRow("Testfall-ID:", self.write_meta_episode_id)
+		self.write_meta_genre = QLineEdit("Forensic Test")
+		wg.addRow("Genre:", self.write_meta_genre)
+		self.write_meta_comment = QLineEdit()
+		wg.addRow("Kommentar:", self.write_meta_comment)
+		now_def2 = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+		self.write_meta_creation_time = QLineEdit(now_def2)
+		wg.addRow("creation_time:", self.write_meta_creation_time)
+		self.write_meta_date = QLineEdit()
+		wg.addRow("date:", self.write_meta_date)
+		self.write_meta_location = QLineEdit("+49.1234+008.5678/")
+		wg.addRow("GPS (ISO 6709):", self.write_meta_location)
+		t4.addWidget(wmeta)
+
+		self.write_btn = QPushButton("creation_time schreiben")
+		self.write_btn.clicked.connect(self.write_start_requested)
+		t4.addWidget(self.write_btn)
+
+		t4.addWidget(QLabel("FFmpeg-Log:"))
+		self.write_log = QTextEdit()
+		self.write_log.setReadOnly(True)
+		t4.addWidget(self.write_log)
+
+	def _write_add_files(self):
+		paths, _ = QFileDialog.getOpenFileNames(
+			self, "Videodateien auswählen",
+			"",
+			"Video (*.mp4 *.mkv *.avi *.mov *.wmv *.ts *.mxf)")
+		if not paths:
+			return
+		base = self.write_base_time.text().strip()
+		offset = self.write_offset.value()
+		self.write_table.itemChanged.disconnect(self._write_on_item_changed)
+		try:
+			dt = datetime.datetime.fromisoformat(base)
+		except ValueError:
+			dt = datetime.datetime.now()
+		for i, p in enumerate(paths):
+			row = self.write_table.rowCount()
+			self.write_table.insertRow(row)
+			item_path = QTableWidgetItem(p)
+			item_path.setFlags(item_path.flags() & ~Qt.ItemFlag.ItemIsEditable)
+			self.write_table.setItem(row, 0, item_path)
+			ct = dt + datetime.timedelta(seconds=offset * row)
+			item_time = QTableWidgetItem(ct.strftime("%Y-%m-%dT%H:%M:%S"))
+			self.write_table.setItem(row, 1, item_time)
+		self.write_table.itemChanged.connect(self._write_on_item_changed)
+
+	def _write_clear(self):
+		self.write_table.setRowCount(0)
+
+	def _write_on_item_changed(self, item):
+		pass  # placeholder; user edits times directly
+
+	def get_write_files(self) -> list[tuple[str, str]]:
+		"""Gibt [(source_path, creation_time), …] aus der Tabelle."""
+		result = []
+		for row in range(self.write_table.rowCount()):
+			src = self.write_table.item(row, 0)
+			ct = self.write_table.item(row, 1)
+			if src and ct and src.text().strip():
+				result.append((src.text().strip(), ct.text().strip()))
+		return result
+
+	def get_write_meta(self):
+		from model import WriteParams
+		return WriteParams(
+			files=[],
+			meta_title=self.write_meta_title.text().strip(),
+			meta_artist=self.write_meta_artist.text().strip(),
+			meta_copyright=self.write_meta_copyright.text().strip(),
+			meta_description=self.write_meta_description.text().strip(),
+			meta_language=self.write_meta_language.text().strip(),
+			meta_show=self.write_meta_show.text().strip(),
+			meta_episode_id=self.write_meta_episode_id.text().strip(),
+			meta_genre=self.write_meta_genre.text().strip(),
+			meta_comment=self.write_meta_comment.text().strip(),
+			meta_creation_time=self.write_meta_creation_time.text().strip(),
+			meta_date=self.write_meta_date.text().strip(),
+			meta_location=self.write_meta_location.text().strip(),
+		)
+
+	def set_write_controls_enabled(self, enabled: bool):
+		self.write_btn.setEnabled(enabled)
+
+	def append_write_log(self, text: str):
+		self.write_log.append(text)
+
+	def clear_write_log(self):
+		self.write_log.clear()
 
 	# ---------- Video-Parameter auslesen ----------
 
