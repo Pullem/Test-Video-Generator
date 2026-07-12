@@ -368,9 +368,9 @@ class MainWindow(QMainWindow):
 
 	def _write_add_files(self):
 		paths, _ = QFileDialog.getOpenFileNames(
-			self, "Videodateien auswählen",
+			self, "Dateien auswählen",
 			"",
-			"Video (*.mp4 *.mkv *.avi *.mov *.wmv *.ts *.mxf)")
+			"Video/Bilder (*.mp4 *.mkv *.avi *.mov *.wmv *.ts *.mxf *.jpg *.jpeg *.png *.tif *.tiff *.bmp *.webp)")
 		if not paths:
 			return
 		base = self.write_base_time.text().strip()
