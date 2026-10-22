@@ -130,6 +130,73 @@ class MainWindow(QMainWindow):
 		self.chk_container_timecode.setChecked(True)
 		ov.addWidget(self.chk_container_timecode)
 
+		# Timecode-Einstellungen
+		tc_box = QGroupBox("Timecode-Einstellungen")
+		tc_form = QFormLayout(tc_box)
+		
+		tc_start_row = QHBoxLayout()
+		tc_start_row.addWidget(QLabel("Startzeitcode:"))
+		self.tc_start_edit = QLineEdit("00:00:00:00")
+		self.tc_start_edit.setPlaceholderText("HH:MM:SS:FF")
+		tc_start_row.addWidget(self.tc_start_edit)
+		tc_form.addRow(tc_start_row)
+		
+		tc_row1 = QHBoxLayout()
+		self.chk_drop_frame = QCheckBox("Drop-Frame (30/60fps)")
+		tc_row1.addWidget(self.chk_drop_frame)
+		tc_row1.addWidget(QLabel("Format:"))
+		self.tc_format_box = QComboBox()
+		self.tc_format_box.addItems(["SMPTE", "EBU"])
+		tc_row1.addWidget(self.tc_format_box)
+		tc_form.addRow(tc_row1)
+		
+		tc_pos_row = QHBoxLayout()
+		tc_pos_row.addWidget(QLabel("Position X:"))
+		self.tc_x_spin = QSpinBox()
+		self.tc_x_spin.setRange(0, 7680)
+		self.tc_x_spin.setValue(40)
+		tc_pos_row.addWidget(self.tc_x_spin)
+		tc_pos_row.addWidget(QLabel("Y:"))
+		self.tc_y_spin = QSpinBox()
+		self.tc_y_spin.setRange(0, 4320)
+		self.tc_y_spin.setValue(40)
+		tc_pos_row.addWidget(self.tc_y_spin)
+		tc_form.addRow(tc_pos_row)
+		
+		tc_style_row = QHBoxLayout()
+		tc_style_row.addWidget(QLabel("Schriftgröße:"))
+		self.tc_font_size_spin = QSpinBox()
+		self.tc_font_size_spin.setRange(8, 300)
+		self.tc_font_size_spin.setValue(48)
+		tc_style_row.addWidget(self.tc_font_size_spin)
+		tc_style_row.addWidget(QLabel("Farbe:"))
+		self.tc_color_edit = QLineEdit("white")
+		tc_style_row.addWidget(self.tc_color_edit)
+		tc_form.addRow(tc_style_row)
+		
+		pts_row = QHBoxLayout()
+		pts_row.addWidget(QLabel("PTS Position X:"))
+		self.pts_x_spin = QSpinBox()
+		self.pts_x_spin.setRange(0, 7680)
+		self.pts_x_spin.setValue(40)
+		pts_row.addWidget(self.pts_x_spin)
+		pts_row.addWidget(QLabel("Y:"))
+		self.pts_y_spin = QSpinBox()
+		self.pts_y_spin.setRange(0, 4320)
+		self.pts_y_spin.setValue(120)
+		pts_row.addWidget(self.pts_y_spin)
+		pts_row.addWidget(QLabel("Größe:"))
+		self.pts_font_size_spin = QSpinBox()
+		self.pts_font_size_spin.setRange(8, 300)
+		self.pts_font_size_spin.setValue(36)
+		pts_row.addWidget(self.pts_font_size_spin)
+		pts_row.addWidget(QLabel("Farbe:"))
+		self.pts_color_edit = QLineEdit("yellow")
+		pts_row.addWidget(self.pts_color_edit)
+		tc_form.addRow(pts_row)
+		
+		t1.addWidget(tc_box)
+
 		font_layout = QHBoxLayout()
 		t1.addLayout(font_layout)
 		font_layout.addWidget(QLabel("Font:"))
@@ -260,21 +327,34 @@ class MainWindow(QMainWindow):
 		btn_img_browse.clicked.connect(self._choose_img_output)
 		io.addWidget(btn_img_browse)
 
-		img_meta = QGroupBox("Metadaten")
+		img_meta = QGroupBox("Metadaten (Container & EXIF)")
 		g = QFormLayout(img_meta)
 		self.img_meta_title = QLineEdit()
-		g.addRow("Titel:", self.img_meta_title)
+		g.addRow("Titel (ImageDescription):", self.img_meta_title)
 		self.img_meta_artist = QLineEdit()
-		g.addRow("Künstler:", self.img_meta_artist)
+		g.addRow("Künstler (Artist):", self.img_meta_artist)
 		self.img_meta_copyright = QLineEdit()
 		g.addRow("Copyright:", self.img_meta_copyright)
 		self.img_meta_comment = QLineEdit()
-		g.addRow("Kommentar:", self.img_meta_comment)
+		g.addRow("Kommentar (UserComment):", self.img_meta_comment)
 		now_def = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
 		self.img_meta_ctime = QLineEdit(now_def)
-		g.addRow("creation_time:", self.img_meta_ctime)
+		g.addRow("creation_time (Container):", self.img_meta_ctime)
 		self.img_meta_location = QLineEdit("+49.1234+008.5678/")
 		g.addRow("GPS (ISO 6709):", self.img_meta_location)
+
+		# EXIF-spezifische Felder
+		self.img_exif_make = QLineEdit()
+		g.addRow("EXIF Make:", self.img_exif_make)
+		self.img_exif_model = QLineEdit()
+		g.addRow("EXIF Model:", self.img_exif_model)
+		self.img_exif_software = QLineEdit("FFmpeg Testvideo Generator")
+		g.addRow("EXIF Software:", self.img_exif_software)
+		self.img_exif_dt_original = QLineEdit()
+		g.addRow("EXIF DateTimeOriginal:", self.img_exif_dt_original)
+		self.img_exif_dt_digitized = QLineEdit()
+		g.addRow("EXIF DateTimeDigitized:", self.img_exif_dt_digitized)
+
 		t3.addWidget(img_meta)
 
 		self.img_format.currentTextChanged.connect(self._update_img_extension)
@@ -453,6 +533,17 @@ class MainWindow(QMainWindow):
 			pts_overlay=self.chk_pts_overlay.isChecked(),
 			datetime_overlay=self.chk_datetime_overlay.isChecked(),
 			container_timecode=self.chk_container_timecode.isChecked(),
+			timecode_start=self.tc_start_edit.text().strip() or "00:00:00:00",
+			timecode_drop_frame=self.chk_drop_frame.isChecked(),
+			timecode_format=self.tc_format_box.currentText(),
+			timecode_x=self.tc_x_spin.value(),
+			timecode_y=self.tc_y_spin.value(),
+			timecode_font_size=self.tc_font_size_spin.value(),
+			timecode_font_color=self.tc_color_edit.text().strip() or "white",
+			pts_x=self.pts_x_spin.value(),
+			pts_y=self.pts_y_spin.value(),
+			pts_font_size=self.pts_font_size_spin.value(),
+			pts_font_color=self.pts_color_edit.text().strip() or "yellow",
 			encoder_meta=self.encoder_edit.text().strip(),
 			output=self.out_edit.text().strip(),
 			meta_title=self.meta_title.text().strip(),
@@ -484,6 +575,11 @@ class MainWindow(QMainWindow):
 			meta_comment=self.img_meta_comment.text().strip(),
 			meta_creation_time=self.img_meta_ctime.text().strip(),
 			meta_location=self.img_meta_location.text().strip(),
+			exif_make=self.img_exif_make.text().strip(),
+			exif_model=self.img_exif_model.text().strip(),
+			exif_software=self.img_exif_software.text().strip(),
+			exif_datetime_original=self.img_exif_dt_original.text().strip(),
+			exif_datetime_digitized=self.img_exif_dt_digitized.text().strip(),
 		)
 
 	def apply_preset(self):
@@ -500,6 +596,9 @@ class MainWindow(QMainWindow):
 			self.crf_spin.setValue(23)
 			self.bitrate_edit.clear()
 			self.gop_spin.setValue(50)
+			self.tc_start_edit.setText("00:00:00:00")
+			self.chk_drop_frame.setChecked(False)
+			self.tc_format_box.setCurrentText("SMPTE")
 		elif preset.startswith("1080p Broadcast"):
 			self.w_spin.setValue(1920)
 			self.h_spin.setValue(1080)
@@ -512,6 +611,9 @@ class MainWindow(QMainWindow):
 			self.crf_spin.setValue(18)
 			self.bitrate_edit.clear()
 			self.gop_spin.setValue(50)
+			self.tc_start_edit.setText("10:00:00:00")
+			self.chk_drop_frame.setChecked(False)
+			self.tc_format_box.setCurrentText("EBU")
 		elif preset.startswith("720p High Motion"):
 			self.w_spin.setValue(1280)
 			self.h_spin.setValue(720)
@@ -524,6 +626,9 @@ class MainWindow(QMainWindow):
 			self.crf_spin.setValue(23)
 			self.bitrate_edit.clear()
 			self.gop_spin.setValue(30)
+			self.tc_start_edit.setText("00:00:00;00")
+			self.chk_drop_frame.setChecked(True)
+			self.tc_format_box.setCurrentText("SMPTE")
 		elif preset.startswith("Low-Light"):
 			self.w_spin.setValue(1280)
 			self.h_spin.setValue(720)
@@ -536,6 +641,9 @@ class MainWindow(QMainWindow):
 			self.crf_spin.setValue(23)
 			self.bitrate_edit.clear()
 			self.gop_spin.setValue(50)
+			self.tc_start_edit.setText("00:00:00:00")
+			self.chk_drop_frame.setChecked(False)
+			self.tc_format_box.setCurrentText("SMPTE")
 		elif preset.startswith("Colorbars"):
 			self.w_spin.setValue(1280)
 			self.h_spin.setValue(720)
@@ -548,6 +656,9 @@ class MainWindow(QMainWindow):
 			self.crf_spin.setValue(23)
 			self.bitrate_edit.clear()
 			self.gop_spin.setValue(50)
+			self.tc_start_edit.setText("12:00:00:00")
+			self.chk_drop_frame.setChecked(False)
+			self.tc_format_box.setCurrentText("SMPTE")
 		self.statusBar().showMessage(f"Preset geladen: {preset}", 3000)
 
 	# ---------- View-Update-Methoden (vom Presenter gerufen) ----------
@@ -615,10 +726,38 @@ class MainWindow(QMainWindow):
 				return default
 			return v.lower() in ("1", "true", "yes")
 
+		def _int(key: str, default: int) -> int:
+			v = settings.get(key)
+			if v is None:
+				return default
+			try:
+				return int(v)
+			except ValueError:
+				return default
+
+		def _str(key: str, default: str) -> str:
+			v = settings.get(key)
+			return v if v is not None else default
+
 		self.chk_timecode_overlay.setChecked(_bool("timecode_overlay"))
 		self.chk_pts_overlay.setChecked(_bool("pts_overlay"))
 		self.chk_datetime_overlay.setChecked(_bool("datetime_overlay", False))
 		self.chk_container_timecode.setChecked(_bool("container_timecode"))
+
+		# Timecode-Einstellungen laden
+		self.tc_start_edit.setText(_str("timecode_start", "00:00:00:00"))
+		self.chk_drop_frame.setChecked(_bool("timecode_drop_frame", False))
+		idx = self.tc_format_box.findText(_str("timecode_format", "SMPTE"))
+		if idx >= 0:
+			self.tc_format_box.setCurrentIndex(idx)
+		self.tc_x_spin.setValue(_int("timecode_x", 40))
+		self.tc_y_spin.setValue(_int("timecode_y", 40))
+		self.tc_font_size_spin.setValue(_int("timecode_font_size", 48))
+		self.tc_color_edit.setText(_str("timecode_font_color", "white"))
+		self.pts_x_spin.setValue(_int("pts_x", 40))
+		self.pts_y_spin.setValue(_int("pts_y", 120))
+		self.pts_font_size_spin.setValue(_int("pts_font_size", 36))
+		self.pts_color_edit.setText(_str("pts_font_color", "yellow"))
 
 	def collect_settings_from_ui(self) -> dict:
 		from pathlib import Path
@@ -631,6 +770,17 @@ class MainWindow(QMainWindow):
 			"pts_overlay": "1" if self.chk_pts_overlay.isChecked() else "0",
 			"datetime_overlay": "1" if self.chk_datetime_overlay.isChecked() else "0",
 			"container_timecode": "1" if self.chk_container_timecode.isChecked() else "0",
+			"timecode_start": self.tc_start_edit.text(),
+			"timecode_drop_frame": "1" if self.chk_drop_frame.isChecked() else "0",
+			"timecode_format": self.tc_format_box.currentText(),
+			"timecode_x": str(self.tc_x_spin.value()),
+			"timecode_y": str(self.tc_y_spin.value()),
+			"timecode_font_size": str(self.tc_font_size_spin.value()),
+			"timecode_font_color": self.tc_color_edit.text(),
+			"pts_x": str(self.pts_x_spin.value()),
+			"pts_y": str(self.pts_y_spin.value()),
+			"pts_font_size": str(self.pts_font_size_spin.value()),
+			"pts_font_color": self.pts_color_edit.text(),
 		}
 
 	# ---------- Dialoge ----------

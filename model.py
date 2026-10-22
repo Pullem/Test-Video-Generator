@@ -8,6 +8,77 @@ from typing import Optional
 
 from PyQt6.QtCore import QThread, pyqtSignal
 
+try:
+    import piexif
+    from PIL import Image
+    PIEEXIF_AVAILABLE = True
+except ImportError:
+    PIEEXIF_AVAILABLE = False
+
+
+# ---------- Timecode-Hilfsfunktionen ----------
+
+def _format_timecode_for_ffmpeg(timecode_str: str, drop_frame: bool = False) -> str:
+	"""
+	Konvertiert einen Timecode-String für FFmpeg drawtext.
+	Drop-Frame wird durch ';' statt ':' im Frames-Feld markiert.
+	
+	Args:
+		timecode_str: Timecode im Format "HH:MM:SS:FF" oder "HH:MM:SS;FF"
+		drop_frame: True für Drop-Frame-Modus
+	
+	Returns:
+		FFmpeg-escaping für drawtext timecode option
+	"""
+	# Normalisiere den Timecode
+	tc = timecode_str.strip()
+	
+	# Drop-Frame: In FFmpeg wird Drop-Frame durch ';' im letzten Feld markiert
+	if drop_frame:
+		# Ersetze den letzten ':' durch ';' (vor dem Frames-Feld)
+		parts = tc.split(':')
+		if len(parts) == 4:
+			tc = ':'.join(parts[:3]) + ';' + parts[3]
+	
+	# FFmpeg escaping: ':' muss zu '\:' werden
+	tc_escaped = tc.replace(':', '\\:')
+	
+	return tc_escaped
+
+
+def _parse_timecode(timecode_str: str) -> tuple[int, int, int, int]:
+	"""
+	Parsst einen Timecode-String und gibt (hours, minutes, seconds, frames) zurück.
+	
+	Args:
+		timecode_str: Timecode im Format "HH:MM:SS:FF" oder "HH:MM:SS;FF"
+	
+	Returns:
+		Tuple (hours, minutes, seconds, frames)
+	"""
+	try:
+		# Entferne Drop-Frame-Semikolon
+		tc = timecode_str.replace(';', ':')
+		parts = tc.split(':')
+		if len(parts) != 4:
+			raise ValueError(f"Invalid timecode format: {timecode_str}")
+		hours, minutes, seconds, frames = map(int, parts)
+		return hours, minutes, seconds, frames
+	except (ValueError, IndexError):
+		return 0, 0, 0, 0
+
+
+# ---------- FFmpeg-Pfad ----------
+
+def _get_ffmpeg_path() -> str:
+	"""Gibt den Pfad zur FFmpeg-Executable zurück.
+	Prüft zuerst das Projektverzeichnis, dann den PATH."""
+	project_dir = Path(__file__).parent
+	local_ffmpeg = project_dir / "ffmpeg.exe"
+	if local_ffmpeg.exists():
+		return str(local_ffmpeg)
+	return "ffmpeg"
+
 
 # ---------- GPS-Hilfsfunktion ----------
 
@@ -41,6 +112,123 @@ def _parse_iso6709(coords: str) -> list[tuple[str, str]]:
 		("GPSLongitudeRef", lon_ref),
 		("GPSLongitude", f"{lon_d}/1 {lon_m}/1 {lon_s}/100"),
 	]
+
+
+# ---------- EXIF-Hilfsfunktionen ----------
+
+def _iso_to_exif_datetime(iso_str: str) -> str:
+	"""Konvertiert ISO-Format (2025-01-15T10:30:00) zu EXIF-Format (2025:01:15 10:30:00)."""
+	try:
+		dt = datetime.datetime.fromisoformat(iso_str)
+		return dt.strftime("%Y:%m:%d %H:%M:%S")
+	except (ValueError, TypeError):
+		return datetime.datetime.now().strftime("%Y:%m:%d %H:%M:%S")
+
+
+def _iso6709_to_piexif_gps(coords: str) -> dict:
+	"""Konvertiert ISO 6709 GPS-String zu piexif GPS-Dict."""
+	if not coords:
+		return {}
+	try:
+		import re
+		m = re.match(r"([+-]\d+\.?\d*)([+-]\d+\.?\d*)/?", coords.strip())
+		if not m:
+			return {}
+		lat = float(m.group(1))
+		lon = float(m.group(2))
+	except (ValueError, TypeError):
+		return {}
+
+	def _to_dms_rational(deg: float):
+		d = int(abs(deg))
+		mf = (abs(deg) - d) * 60
+		mi = int(mf)
+		sf = (mf - mi) * 60
+		# Rational als Tuple (numerator, denominator)
+		return ((d, 1), (mi, 1), (int(round(sf * 100)), 100))
+
+	lat_ref = "N" if lat >= 0 else "S"
+	lon_ref = "E" if lon >= 0 else "W"
+
+	return {
+		piexif.GPSIFD.GPSLatitudeRef: lat_ref.encode() if isinstance(lat_ref, str) else lat_ref,
+		piexif.GPSIFD.GPSLatitude: _to_dms_rational(lat),
+		piexif.GPSIFD.GPSLongitudeRef: lon_ref.encode() if isinstance(lon_ref, str) else lon_ref,
+		piexif.GPSIFD.GPSLongitude: _to_dms_rational(lon),
+	}
+
+
+def write_exif_to_image(
+	path: str,
+	creation_time: str = "",
+	title: str = "",
+	artist: str = "",
+	copyright: str = "",
+	comment: str = "",
+	location: str = "",
+	make: str = "",
+	model: str = "",
+	software: str = "",
+	datetime_original: str = "",
+	datetime_digitized: str = "",
+) -> bool:
+	"""
+	Schreibt EXIF-Metadaten in ein Bild (PNG, JPEG, TIFF, WebP).
+	Gibt True bei Erfolg, False bei Fehler zurück.
+	"""
+	if not PIEEXIF_AVAILABLE:
+		return False
+	if not Path(path).exists():
+		return False
+
+	try:
+		img = Image.open(path)
+		exif_dict = {"0th": {}, "Exif": {}, "GPS": {}, "1st": {}, "thumbnail": None}
+
+		# 0th IFD (Image IFD)
+		if creation_time:
+			exif_dt = _iso_to_exif_datetime(creation_time)
+			exif_dict["0th"][piexif.ImageIFD.DateTime] = exif_dt
+		if title:
+			exif_dict["0th"][piexif.ImageIFD.ImageDescription] = title
+		if artist:
+			exif_dict["0th"][piexif.ImageIFD.Artist] = artist
+		if copyright:
+			exif_dict["0th"][piexif.ImageIFD.Copyright] = copyright
+		if make:
+			exif_dict["0th"][piexif.ImageIFD.Make] = make
+		if model:
+			exif_dict["0th"][piexif.ImageIFD.Model] = model
+		if software:
+			exif_dict["0th"][piexif.ImageIFD.Software] = software
+
+		# Exif IFD
+		if datetime_original:
+			exif_dict["Exif"][piexif.ExifIFD.DateTimeOriginal] = _iso_to_exif_datetime(datetime_original)
+		elif creation_time:
+			exif_dict["Exif"][piexif.ExifIFD.DateTimeOriginal] = _iso_to_exif_datetime(creation_time)
+		if datetime_digitized:
+			exif_dict["Exif"][piexif.ExifIFD.DateTimeDigitized] = _iso_to_exif_datetime(datetime_digitized)
+		elif creation_time:
+			exif_dict["Exif"][piexif.ExifIFD.DateTimeDigitized] = _iso_to_exif_datetime(creation_time)
+
+		# GPS IFD
+		if location:
+			gps_data = _iso6709_to_piexif_gps(location)
+			exif_dict["GPS"].update(gps_data)
+
+		# UserComment (for comment field)
+		if comment:
+			# piexif expects UserComment in specific format: charset + comment
+			# ASCII = b'ASCII\x00\x00\x00' + comment_bytes
+			user_comment = b'ASCII\x00\x00\x00' + comment.encode('ascii', errors='replace')
+			exif_dict["Exif"][piexif.ExifIFD.UserComment] = user_comment
+
+		exif_bytes = piexif.dump(exif_dict)
+		img.save(path, exif=exif_bytes)
+		return True
+	except Exception:
+		return False
 
 
 def set_file_creation_time(path: str, creation_time_str: str):
@@ -93,7 +281,7 @@ class VideoParams:
 	fps: int = 25
 	duration: int = 300
 	source: str = "black"
-	fontfile: str = "C\\:/Windows/Fonts/arial.ttf"
+	fontfile: str = "C:/Windows/Fonts/arial.ttf"
 	font_size: int = 48
 	encoder: str = "libx264 (CPU)"
 	crf: int = 23
@@ -103,6 +291,18 @@ class VideoParams:
 	pts_overlay: bool = True
 	datetime_overlay: bool = False
 	container_timecode: bool = True
+	# Timecode-Einstellungen
+	timecode_start: str = "00:00:00:00"
+	timecode_drop_frame: bool = False
+	timecode_format: str = "SMPTE"  # SMPTE, EBU
+	timecode_x: int = 40
+	timecode_y: int = 40
+	timecode_font_size: int = 48
+	timecode_font_color: str = "white"
+	pts_x: int = 40
+	pts_y: int = 120
+	pts_font_size: int = 36
+	pts_font_color: str = "yellow"
 	encoder_meta: str = "FFmpeg Testvideo Generator"
 	output: str = "ffmpeg_testvideo.mp4"
 	meta_title: str = ""
@@ -124,7 +324,7 @@ class ImageParams:
 	width: int = 1920
 	height: int = 1080
 	source: str = "black"
-	fontfile: str = "C\\:/Windows/Fonts/arial.ttf"
+	fontfile: str = "C:/Windows/Fonts/arial.ttf"
 	font_size: int = 54
 	output: str = "testbild.png"
 	meta_title: str = ""
@@ -133,6 +333,12 @@ class ImageParams:
 	meta_comment: str = ""
 	meta_creation_time: str = ""
 	meta_location: str = ""
+	# EXIF-spezifische Felder
+	exif_make: str = ""
+	exif_model: str = ""
+	exif_software: str = "FFmpeg Testvideo Generator"
+	exif_datetime_original: str = ""
+	exif_datetime_digitized: str = ""
 
 
 @dataclass
@@ -206,11 +412,14 @@ class VideoCommandBuilder:
 		vf_parts = []
 
 		if params.timecode_overlay:
+			tc_escaped = _format_timecode_for_ffmpeg(params.timecode_start, params.timecode_drop_frame)
 			tc = (
 				f"drawtext=fontfile='{fontfile_esc}':"
-				f"timecode='00\\:00\\:00\\:00':"
+				f"timecode='{tc_escaped}':"
 				f"r={params.fps}:"
-				f"x=40:y=40:fontsize={params.font_size}:fontcolor=white"
+				f"x={params.timecode_x}:y={params.timecode_y}:"
+				f"fontsize={params.timecode_font_size}:"
+				f"fontcolor={params.timecode_font_color}"
 			)
 			vf_parts.append(tc)
 
@@ -218,7 +427,9 @@ class VideoCommandBuilder:
 			pts = (
 				f"drawtext=fontfile='{fontfile_esc}':"
 				f"text='%{{pts\\:hms}}.%{{n}}':"
-				f"x=40:y=120:fontsize={max(8, params.font_size - 12)}:fontcolor=yellow"
+				f"x={params.pts_x}:y={params.pts_y}:"
+				f"fontsize={params.pts_font_size}:"
+				f"fontcolor={params.pts_font_color}"
 			)
 			vf_parts.append(pts)
 
@@ -258,7 +469,7 @@ class VideoCommandBuilder:
 
 		if "nvenc" in params.encoder:
 			cmd = [
-				"ffmpeg", "-y",
+				_get_ffmpeg_path(), "-y",
 				"-f", "lavfi", "-i", input_filter,
 				"-vf", vf_filter,
 				"-c:v", "h264_nvenc",
@@ -268,7 +479,7 @@ class VideoCommandBuilder:
 			]
 		else:
 			cmd = [
-				"ffmpeg", "-y",
+				_get_ffmpeg_path(), "-y",
 				"-f", "lavfi", "-i", input_filter,
 				"-vf", vf_filter,
 				"-c:v", "libx264",
@@ -285,7 +496,9 @@ class VideoCommandBuilder:
 		if params.encoder_meta:
 			cmd += ["-metadata", f"encoder={params.encoder_meta}"]
 		if params.container_timecode:
-			cmd += ["-metadata", "timecode=00:00:00:00"]
+			# Container-Timecode: Verwende den Startzeitcode ohne Drop-Frame-Semikolon
+			tc_for_container = params.timecode_start.replace(';', ':')
+			cmd += ["-metadata", f"timecode={tc_for_container}"]
 
 		meta_map = [
 			("title", params.meta_title),
@@ -345,7 +558,7 @@ class ImageCommandBuilder:
 		)
 
 		cmd = [
-			"ffmpeg", "-y",
+			_get_ffmpeg_path(), "-y",
 			"-f", "lavfi", "-i", input_filter,
 			"-vf", vf,
 			"-frames:v", "1",
@@ -378,7 +591,7 @@ class WriteCommandBuilder:
 			  ) -> tuple[list[str], str]:
 		p = Path(source)
 		temp = p.with_stem(p.stem + "_tmp_w")
-		cmd = ["ffmpeg", "-y", "-i", source, "-c", "copy", "-map", "0"]
+		cmd = [_get_ffmpeg_path(), "-y", "-i", source, "-c", "copy", "-map", "0"]
 
 		if entry.creation_time:
 			ct = entry.creation_time

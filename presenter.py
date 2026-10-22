@@ -4,6 +4,7 @@ from model import (
 	WriteFileEntry,
 	SettingsManager, FFmpegWorker, ImageWorker,
 	set_file_creation_time,
+	write_exif_to_image,
 )
 
 
@@ -60,6 +61,19 @@ class Presenter:
 	def _on_generate_image(self):
 		params = self.view.get_image_params()
 		self._pending_image_ctime = params.meta_creation_time
+		# EXIF-Parameter speichern für nachträgliches Schreiben
+		self._pending_image_exif = {
+			"title": params.meta_title,
+			"artist": params.meta_artist,
+			"copyright": params.meta_copyright,
+			"comment": params.meta_comment,
+			"location": params.meta_location,
+			"make": params.exif_make,
+			"model": params.exif_model,
+			"software": params.exif_software,
+			"datetime_original": params.exif_datetime_original,
+			"datetime_digitized": params.exif_datetime_digitized,
+		}
 
 		self.view.clear_img_log()
 		self.view.set_img_status("")
@@ -77,7 +91,31 @@ class Presenter:
 
 	def _on_image_finished(self, path: str):
 		set_file_creation_time(path, self._pending_image_ctime)
+
+		# EXIF-Metadaten nachträglich schreiben
+		exif_params = getattr(self, '_pending_image_exif', {})
+		if exif_params and exif_params.get("title") or exif_params.get("artist") or exif_params.get("copyright") or exif_params.get("comment") or exif_params.get("location") or exif_params.get("make") or exif_params.get("model") or exif_params.get("software") or exif_params.get("datetime_original") or exif_params.get("datetime_digitized"):
+			success = write_exif_to_image(
+				path,
+				creation_time=self._pending_image_ctime,
+				title=exif_params.get("title", ""),
+				artist=exif_params.get("artist", ""),
+				copyright=exif_params.get("copyright", ""),
+				comment=exif_params.get("comment", ""),
+				location=exif_params.get("location", ""),
+				make=exif_params.get("make", ""),
+				model=exif_params.get("model", ""),
+				software=exif_params.get("software", ""),
+				datetime_original=exif_params.get("datetime_original", ""),
+				datetime_digitized=exif_params.get("datetime_digitized", ""),
+			)
+			if success:
+				self.view.append_img_log("✅ EXIF-Metadaten geschrieben")
+			else:
+				self.view.append_img_log("⚠️ EXIF-Metadaten konnten nicht geschrieben werden (piexif nicht verfügbar oder Fehler)")
+
 		self._pending_image_ctime = ""
+		self._pending_image_exif = {}
 		self.view.set_img_controls_enabled(True)
 		self.view.show_img_finished(path)
 
