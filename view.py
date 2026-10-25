@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (
 	QFileDialog, QColorDialog, QProgressBar,
 	QTextEdit, QComboBox, QTabWidget, QGroupBox, QFormLayout,
 	QTableWidget, QTableWidgetItem, QHeaderView,
-	QAbstractItemView, QScrollArea, QFrame, QSizePolicy,
+	QAbstractItemView, QScrollArea, QFrame, QSizePolicy, QSpacerItem,
 	QMenu, QMessageBox, QApplication,
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QSize, QSettings
@@ -47,6 +47,64 @@ COLOR_ORANGE_GRAD_H = "QLinearGradient(x1:0,y1:0,x2:1,y2:0,stop:0 #ffa02f,stop:0
 COLOR_DISABLED     = "#404040"   # Disabled-Text
 COLOR_SEL_BG       = "#ffa02f"   # Selection-Hintergrund (Orange)
 COLOR_SEL_TEXT     = "#000000"   # Selection-Text (Schwarz auf Orange)
+
+# ---------- Hintergrund-Auswahl (Video-Tab) ----------
+# Standardfarben + FFmpeg-Testquellen (Combo bleibt editierbar)
+BG_CHOICES = [
+    "black", "white", "gray", "silver",
+    "red", "maroon", "orange", "yellow", "olive",
+    "lime", "green", "teal", "cyan", "aqua",
+    "blue", "navy", "purple", "magenta", "fuchsia", "pink",
+    "brown", "gold", "khaki", "beige", "coral", "ivory",
+    "#050505",
+    "smptebars", "smptehdbars", "testsrc", "testsrc2",
+    "rgbtestsrc", "yuvtestsrc", "gradients",
+]
+
+
+def _color_swatch_icon(color_name: str) -> QIcon:
+	"""Erstellt ein kleines Farb-Icon für die Hintergrund-ComboBox."""
+	pixmap = QPixmap(14, 14)
+	pixmap.fill(Qt.GlobalColor.transparent)
+	painter = QPainter(pixmap)
+	color = QColor(color_name)
+	if color.isValid():
+		painter.setPen(QColor("#1e1e1e"))
+		painter.setBrush(color)
+		painter.drawRect(1, 1, 12, 12)
+	else:
+		# Kein Farbwert (z.B. testsrc): neutrales graues Feld
+		painter.setPen(QColor("#7f8c8d"))
+		painter.setBrush(QColor("#4d4d4d"))
+		painter.drawRect(1, 1, 12, 12)
+	painter.end()
+	return QIcon(pixmap)
+
+
+def _ensure_combo_arrow() -> str:
+	"""Erzeugt ein kleines Pfeil-PNG für ComboBoxen und gibt den Pfad zurück."""
+	import os
+	import tempfile
+	path = os.path.join(tempfile.gettempdir(), "tvg_combo_arrow.png").replace("\\", "/")
+	if not os.path.exists(path):
+		pixmap = QPixmap(10, 6)
+		pixmap.fill(Qt.GlobalColor.transparent)
+		painter = QPainter(pixmap)
+		painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+		painter.setPen(Qt.PenStyle.NoPen)
+		painter.setBrush(QColor("#b1b1b1"))
+		from PyQt6.QtGui import QPolygon
+		from PyQt6.QtCore import QPoint
+		points = [QPoint(0, 0), QPoint(9, 0), QPoint(4, 5)]
+		painter.drawPolygon(QPolygon(points))
+		painter.end()
+		pixmap.save(path)
+	return path
+
+
+def resolve_stylesheet() -> str:
+	"""Ersetzt Platzhalter im APP_STYLESHEET (z.B. ComboBox-Pfeil-Pfad)."""
+	return APP_STYLESHEET.replace("%COMBO_ARROW%", _ensure_combo_arrow())
 
 # ---------- App-weites QSS-Stylesheet (Dark-Orange) ----------
 
@@ -107,12 +165,13 @@ QLineEdit:disabled, QSpinBox:disabled, QComboBox:disabled {
 }
 QComboBox::drop-down {
 	border: none;
-	padding-right: 8px;
+	width: 26px;
 	background-color: transparent;
 }
 QComboBox::down-arrow {
-	width: 12px;
-	height: 12px;
+	image: url(%COMBO_ARROW%);
+	width: 10px;
+	height: 6px;
 }
 QComboBox QAbstractItemView {
 	background-color: #4d4d4d;
@@ -219,35 +278,37 @@ QCheckBox, QRadioButton {
 	color: #b1b1b1;
 }
 QCheckBox::indicator, QRadioButton::indicator {
-	width: 14px;
-	height: 14px;
-	border: 1px solid #b1b1b1;
+	width: 16px;
+	height: 16px;
+	border: 2px solid #7f8c8d;
 	border-radius: 3px;
-	background-color: #323232;
+	background-color: #2a2a2a;
 }
 QCheckBox::indicator:hover, QRadioButton::indicator:hover {
-	border: 1px solid #ffa02f;
+	border: 2px solid #ffa02f;
+}
+QCheckBox::indicator:checked {
+	background-color: #ffa02f;
+	border: 2px solid #ffa02f;
+}
+QCheckBox::indicator:disabled, QRadioButton::indicator:disabled {
+	border-color: #444444;
+	background-color: #323232;
 }
 QRadioButton::indicator {
-	border-radius: 7px;
+	width: 16px;
+	height: 16px;
+	border-radius: 8px;
 }
 QRadioButton::indicator:checked {
 	background-color: qradialgradient(
 		cx: 0.5, cy: 0.5, fx: 0.5, fy: 0.5,
-		radius: 1.0, stop: 0.25 #ffaa00, stop: 0.3 #323232
+		radius: 1.0, stop: 0.3 #ffa02f, stop: 0.4 #323232
 	);
-	border: 1px solid #ffaa00;
-}
-QCheckBox::indicator:checked {
-	background-color: #323232;
-	border: 1px solid #ffaa00;
+	border: 2px solid #ffa02f;
 }
 QCheckBox:disabled, QRadioButton:disabled {
 	color: #404040;
-}
-QCheckBox:disabled::indicator, QRadioButton:disabled::indicator {
-	border-color: #444444;
-	background-color: #323232;
 }
 
 /* ---------- TabWidget ---------- */
@@ -567,8 +628,8 @@ class MainWindow(QMainWindow):
 		self.setMinimumSize(960, 720)
 		self.resize(1100, 800)
 
-		# App-weites Stylesheet anwenden
-		self.setStyleSheet(APP_STYLESHEET)
+		# App-weites Stylesheet anwenden (mit aufgeloesten Platzhaltern)
+		self.setStyleSheet(resolve_stylesheet())
 
 		# App-Icon setzen
 		app_icon = create_app_icon()
@@ -812,6 +873,20 @@ class MainWindow(QMainWindow):
 		res_row.addStretch()
 		video_layout.addLayout(res_row, 0, 1)
 
+		# Dauer (kompakte Einheit direkt hinter der Auflösung)
+		dur_row = QHBoxLayout()
+		dur_row.setSpacing(4)
+		dur_label = QLabel("Dauer:")
+		dur_row.addWidget(dur_label)
+		self.dur_spin = QSpinBox()
+		self.dur_spin.setRange(1, 3600)
+		self.dur_spin.setValue(300)
+		self.dur_spin.setSuffix(" s")
+		self.dur_spin.setMinimumWidth(100)
+		self.dur_spin.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
+		dur_row.addWidget(self.dur_spin)
+		video_layout.addLayout(dur_row, 0, 2)
+
 		# FPS
 		fps_label = QLabel("FPS:")
 		video_layout.addWidget(fps_label, 1, 0)
@@ -819,32 +894,42 @@ class MainWindow(QMainWindow):
 		self.fps_spin.setRange(1, 240)
 		self.fps_spin.setValue(25)
 		self.fps_spin.setMinimumWidth(100)
+		# Nicht auf Spaltenbreite dehnen (Maximum = nur bis sizeHint)
+		self.fps_spin.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
 		video_layout.addWidget(self.fps_spin, 1, 1)
 
-		# Dauer
-		dur_label = QLabel("Dauer:")
-		video_layout.addWidget(dur_label, 1, 2)
-		self.dur_spin = QSpinBox()
-		self.dur_spin.setRange(1, 3600)
-		self.dur_spin.setValue(300)
-		self.dur_spin.setSuffix(" s")
-		self.dur_spin.setMinimumWidth(100)
-		video_layout.addWidget(self.dur_spin, 1, 3)
-
-		# Hintergrund
+		# Hintergrund (Dropdown mit Standardfarben, weiterhin frei beschriftbar)
+		# Direkt im Gitter (kein flexibles Zwischen-Layout): Combo und Button
+		# bleiben dadurch exakt an der Eingabespalte ausgerichtet.
 		bg_label = QLabel("Hintergrund:")
 		video_layout.addWidget(bg_label, 2, 0)
-		bg_row = QHBoxLayout()
-		bg_row.setSpacing(4)
-		self.bg_edit = QLineEdit("black")
-		self.bg_edit.setMinimumWidth(150)
-		self.bg_edit.setPlaceholderText("Farbe oder Quelle (z.B. black, smptebars, testsrc)")
-		bg_row.addWidget(self.bg_edit, 1)
+		self.bg_edit = QComboBox()
+		self.bg_edit.setEditable(True)
+		self.bg_edit.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+		self.bg_edit.setMinimumWidth(170)
+		self.bg_edit.setMaximumWidth(320)
+		self.bg_edit.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+		self.bg_edit.setToolTip(
+			"FFmpeg-Farbe oder Quelle auswählen\n"
+			"Eigene Werte sind weiterhin möglich (#RRGGBB, smptebars, testsrc, ...)"
+		)
+		for _bg_name in BG_CHOICES:
+			self.bg_edit.addItem(_color_swatch_icon(_bg_name), _bg_name)
+		self.bg_edit.setCurrentText("black")
+		video_layout.addWidget(self.bg_edit, 2, 1)
 		btn_vid_color = QPushButton("Farbe …")
 		btn_vid_color.clicked.connect(self._choose_vid_bg_color)
 		btn_vid_color.setFixedWidth(80)
-		bg_row.addWidget(btn_vid_color)
-		video_layout.addLayout(bg_row, 2, 1, 1, 3)
+		btn_vid_color.setToolTip("Farbwähler öffnen (trägt #RRGGBB ein)")
+		video_layout.addWidget(btn_vid_color, 2, 2)
+
+		# Leer-Spalte am rechten Rand: nimmt den gesamten Platzüberschuss auf,
+		# sodass Label- und Eingabespalten kompakt bleiben und nicht aufweiten.
+		video_layout.addItem(
+			QSpacerItem(0, 0, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum),
+			0, 3, 3, 1
+		)
+		video_layout.setColumnStretch(3, 1)
 
 		t1.addWidget(video_group)
 
@@ -869,6 +954,7 @@ class MainWindow(QMainWindow):
 		self.crf_spin.setRange(0, 51)
 		self.crf_spin.setValue(23)
 		self.crf_spin.setMinimumWidth(80)
+		self.crf_spin.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
 		self.crf_spin.setToolTip("Quality Parameter (0=lossless, 51=worst)\nNVENC: QP (0=best, 51=worst)")
 		enc_layout.addWidget(self.crf_spin, 0, 3)
 
@@ -889,6 +975,14 @@ class MainWindow(QMainWindow):
 		self.gop_spin.setMinimumWidth(80)
 		self.gop_spin.setToolTip("Group of Pictures - Keyframe-Abstand in Frames")
 		enc_layout.addWidget(self.gop_spin, 2, 1)
+
+		# Leer-Spalte am rechten Rand: haelt Label- und Eingabespalte kompakt,
+		# statt den Platzüberschuss gleichmäßig auf alle Spalten zu verteilen.
+		enc_layout.addItem(
+			QSpacerItem(0, 0, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum),
+			0, 4, 3, 1
+		)
+		enc_layout.setColumnStretch(4, 1)
 
 		t1.addWidget(enc_group)
 
@@ -1054,6 +1148,8 @@ class MainWindow(QMainWindow):
 		self.font_size.setValue(48)
 		self.font_size.setSuffix(" px")
 		self.font_size.setMinimumWidth(100)
+		# Kompakt halten: Wert und Pfeile bleiben beisammen (nicht volle Spaltenbreite)
+		self.font_size.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
 		font_layout.addWidget(self.font_size, 1, 1)
 
 		t1.addWidget(font_group)
@@ -2171,7 +2267,7 @@ class MainWindow(QMainWindow):
 			height=self.h_spin.value(),
 			fps=self.fps_spin.value(),
 			duration=self.dur_spin.value(),
-			source=self.bg_edit.text().strip(),
+			source=self.bg_edit.currentText().strip(),
 			fontfile=self.font_edit.text().strip(),
 			font_size=self.font_size.value(),
 			encoder=self.encoder_box.currentText(),
@@ -2238,7 +2334,7 @@ class MainWindow(QMainWindow):
 			self.h_spin.setValue(720)
 			self.fps_spin.setValue(25)
 			self.dur_spin.setValue(300)
-			self.bg_edit.setText("black")
+			self.bg_edit.setCurrentText("black")
 			self.chk_timecode_overlay.setChecked(True)
 			self.chk_pts_overlay.setChecked(True)
 			self.chk_container_timecode.setChecked(True)
@@ -2253,7 +2349,7 @@ class MainWindow(QMainWindow):
 			self.h_spin.setValue(1080)
 			self.fps_spin.setValue(25)
 			self.dur_spin.setValue(600)
-			self.bg_edit.setText("black")
+			self.bg_edit.setCurrentText("black")
 			self.chk_timecode_overlay.setChecked(True)
 			self.chk_pts_overlay.setChecked(False)
 			self.chk_container_timecode.setChecked(True)
@@ -2268,7 +2364,7 @@ class MainWindow(QMainWindow):
 			self.h_spin.setValue(720)
 			self.fps_spin.setValue(60)
 			self.dur_spin.setValue(60)
-			self.bg_edit.setText("black")
+			self.bg_edit.setCurrentText("black")
 			self.chk_timecode_overlay.setChecked(False)
 			self.chk_pts_overlay.setChecked(True)
 			self.chk_container_timecode.setChecked(False)
@@ -2283,7 +2379,7 @@ class MainWindow(QMainWindow):
 			self.h_spin.setValue(720)
 			self.fps_spin.setValue(25)
 			self.dur_spin.setValue(120)
-			self.bg_edit.setText("#050505")
+			self.bg_edit.setCurrentText("#050505")
 			self.chk_timecode_overlay.setChecked(True)
 			self.chk_pts_overlay.setChecked(False)
 			self.chk_container_timecode.setChecked(True)
@@ -2298,7 +2394,7 @@ class MainWindow(QMainWindow):
 			self.h_spin.setValue(720)
 			self.fps_spin.setValue(25)
 			self.dur_spin.setValue(30)
-			self.bg_edit.setText("smptebars")
+			self.bg_edit.setCurrentText("smptebars")
 			self.chk_timecode_overlay.setChecked(True)
 			self.chk_pts_overlay.setChecked(False)
 			self.chk_container_timecode.setChecked(True)
@@ -2463,10 +2559,10 @@ class MainWindow(QMainWindow):
 
 	def _choose_vid_bg_color(self):
 		color = QColorDialog.getColor(
-			QColor(self.bg_edit.text()), self, "Hintergrundfarbe"
+			QColor(self.bg_edit.currentText()), self, "Hintergrundfarbe"
 		)
 		if color.isValid():
-			self.bg_edit.setText(color.name())
+			self.bg_edit.setCurrentText(color.name())
 
 	def _choose_img_bg_color(self):
 		color = QColorDialog.getColor(

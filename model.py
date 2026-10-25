@@ -399,12 +399,20 @@ class SettingsManager:
 # ---------- Kommando-Builder ----------
 
 class VideoCommandBuilder:
+	# Von FFmpeg unterstuetzte Testquellen (lavfi-Generatoren)
+	FFMPEG_SOURCES = (
+		"smptebars", "smptehdbars",
+		"testsrc", "testsrc2",
+		"rgbtestsrc", "yuvtestsrc",
+		"gradients", "nullsrc",
+	)
+
 	@staticmethod
 	def build(params: VideoParams) -> list[str]:
 		fontfile_esc = params.fontfile.replace(":", "\\:")
 		source_lower = params.source.lower()
 
-		if source_lower in ("smptebars", "testsrc", "testsrc2"):
+		if source_lower in VideoCommandBuilder.FFMPEG_SOURCES:
 			input_filter = f"{source_lower}=s={params.width}x{params.height}:r={params.fps}:d={params.duration}"
 		else:
 			input_filter = f"color=c={params.source}:s={params.width}x{params.height}:r={params.fps}:d={params.duration}"
@@ -538,7 +546,7 @@ class ImageCommandBuilder:
 		time_esc = time_str.replace(":", "\\:")
 
 		source_lower = params.source.lower()
-		if source_lower in ("smptebars", "testsrc", "testsrc2"):
+		if source_lower in VideoCommandBuilder.FFMPEG_SOURCES:
 			input_filter = f"{source_lower}=s={params.width}x{params.height}:d=1"
 		else:
 			input_filter = f"color=c={params.source}:s={params.width}x{params.height}:d=1"
