@@ -81,6 +81,22 @@ def _color_swatch_icon(color_name: str) -> QIcon:
 	return QIcon(pixmap)
 
 
+def _set_combo_value(combo: QComboBox, value: str) -> None:
+	"""Setzt den Wert einer (editierbaren) ComboBox inkl. Swatch-Icon.
+
+	Vorhandene Einträge werden über setCurrentIndex gesetzt, damit Text UND
+	Icon zusammenpassen – setCurrentText aktualisiert bei editierbaren
+	ComboBoxen nur den Text, das Icon bliebe dagegen auf dem alten Eintrag.
+	Eigene Werte (z.B. #RRGGBB aus dem Farbwähler) erhalten einen eigenen
+	Eintrag mit passendem Farb-Swatch.
+	"""
+	idx = combo.findText(value)
+	if idx < 0:
+		combo.addItem(_color_swatch_icon(value), value)
+		idx = combo.findText(value)
+	combo.setCurrentIndex(idx)
+
+
 def _ensure_combo_arrow() -> str:
 	"""Erzeugt ein kleines Pfeil-PNG für ComboBoxen und gibt den Pfad zurück."""
 	import os
@@ -823,9 +839,12 @@ class MainWindow(QMainWindow):
 		""")
 		preset_layout = QHBoxLayout(preset_group)
 		preset_layout.setSpacing(SPACING)
+		preset_layout.setContentsMargins(GROUP_PADDING, GROUP_PADDING, GROUP_PADDING, GROUP_PADDING)
 		
 		preset_label = QLabel("Preset:")
-		preset_label.setMinimumWidth(60)
+		# Exakt die Label-Spaltenbreite von "Video-Einstellungen" darunter (68px),
+		# damit die Combo-Box in derselben Eingabespalte startet
+		preset_label.setMinimumWidth(68)
 		preset_layout.addWidget(preset_label)
 		
 		self.preset_box = QComboBox()
@@ -836,12 +855,18 @@ class MainWindow(QMainWindow):
 			"Low-Light Test (2min, dark)",
 			"Colorbars + Timecode (30s)"
 		])
+		# Kompakt: nur so breit wie der längste Eintrag braucht (kein Stretch)
 		self.preset_box.setMinimumWidth(280)
-		preset_layout.addWidget(self.preset_box, 1)
+		self.preset_box.setMaximumWidth(380)
+		self.preset_box.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
+		preset_layout.addWidget(self.preset_box)
 		
 		self.btn_apply_preset = QPushButton("Preset laden")
 		self.btn_apply_preset.setMinimumWidth(100)
 		preset_layout.addWidget(self.btn_apply_preset)
+		
+		# Leer-Stretch: fängt den Platzüberschuss auf, Zeile bleibt linksbündig
+		preset_layout.addStretch()
 		
 		t1.addWidget(preset_group)
 
@@ -916,6 +941,12 @@ class MainWindow(QMainWindow):
 		for _bg_name in BG_CHOICES:
 			self.bg_edit.addItem(_color_swatch_icon(_bg_name), _bg_name)
 		self.bg_edit.setCurrentText("black")
+		# Hintergrund-Logik: Nur solange der Nutzer den Hintergrund nicht selbst
+		# geändert hat, darf ein Preset ihn setzen (Start + erstes Laden = schwarz).
+		self._bg_preset_override = False
+		self._bg_internal_change = False
+		self.bg_edit.lineEdit().textEdited.connect(self._on_bg_user_changed)
+		self.bg_edit.activated.connect(self._on_bg_user_changed)
 		video_layout.addWidget(self.bg_edit, 2, 1)
 		btn_vid_color = QPushButton("Farbe …")
 		btn_vid_color.clicked.connect(self._choose_vid_bg_color)
@@ -1393,22 +1424,32 @@ class MainWindow(QMainWindow):
 		preset_row.addStretch()
 		img_layout.addLayout(preset_row, 1, 1, 1, 3)
 
-		# Hintergrund
+		# Hintergrund (Dropdown mit Standardfarben + Testquellen, weiterhin frei beschriftbar)
+		# Gleiche Auswahl wie im Video-Tab; die Combo bleibt editierbar,
+		# eigene Werte (#RRGGBB, Farbnamen, lavfi-Quellen) sind weiterhin möglich.
 		bg_label = QLabel("Hintergrund:")
 		img_layout.addWidget(bg_label, 2, 0)
-		bg_row = QHBoxLayout()
-		bg_row.setSpacing(4)
-		self.img_bg = QLineEdit("black")
+		self.img_bg = QComboBox()
+		self.img_bg.setEditable(True)
+		self.img_bg.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
 		self.img_bg.setMinimumWidth(150)
-		self.img_bg.setToolTip("FFmpeg color name oder #RRGGBB")
-		bg_row.addWidget(self.img_bg, 1)
+		self.img_bg.setMaximumWidth(320)
+		self.img_bg.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+		self.img_bg.setToolTip(
+			"FFmpeg-Farbe oder Testquelle auswählen\n"
+			"Eigene Werte sind weiterhin möglich (#RRGGBB, smptebars, testsrc, ...)"
+		)
+		for _bg_name in BG_CHOICES:
+			self.img_bg.addItem(_color_swatch_icon(_bg_name), _bg_name)
+		self.img_bg.setCurrentText("black")
+		# Direkt im Gitter: Feld und Button bleiben exakt an der Wertspalte
+		img_layout.addWidget(self.img_bg, 2, 1)
 		btn_img_color = QPushButton("Farbe …")
 		btn_img_color.clicked.connect(self._choose_img_bg_color)
 		btn_img_color.setFixedWidth(80)
-		bg_row.addWidget(btn_img_color)
-		img_layout.addLayout(bg_row, 2, 1, 1, 3)
+		img_layout.addWidget(btn_img_color, 2, 2)
 
-		# Schrift
+		# Schrift + Größe als eine Einheit (Pfad, Auswahl, Schriftgröße zusammen)
 		font_label = QLabel("Schriftart:")
 		img_layout.addWidget(font_label, 3, 0)
 		font_row = QHBoxLayout()
@@ -1419,17 +1460,17 @@ class MainWindow(QMainWindow):
 		btn_imgfont.clicked.connect(lambda: self._choose_font(self.img_font))
 		btn_imgfont.setFixedWidth(110)
 		font_row.addWidget(btn_imgfont)
-		img_layout.addLayout(font_row, 3, 1)
-
-		# Schriftgröße
 		font_size_label = QLabel("Größe:")
-		img_layout.addWidget(font_size_label, 3, 2)
+		font_row.addWidget(font_size_label)
 		self.img_font_size = QSpinBox()
 		self.img_font_size.setRange(8, 300)
 		self.img_font_size.setValue(54)
 		self.img_font_size.setSuffix(" px")
 		self.img_font_size.setMinimumWidth(100)
-		img_layout.addWidget(self.img_font_size, 3, 3)
+		# Kompakt halten: Wert und Pfeile bleiben beisammen
+		self.img_font_size.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
+		font_row.addWidget(self.img_font_size)
+		img_layout.addLayout(font_row, 3, 1, 1, 3)
 
 		# Ausgabedatei
 		out_label = QLabel("Ausgabedatei:")
@@ -1443,6 +1484,14 @@ class MainWindow(QMainWindow):
 		btn_img_browse.setFixedWidth(140)
 		out_row.addWidget(btn_img_browse)
 		img_layout.addLayout(out_row, 4, 1, 1, 3)
+
+		# Leer-Spalte am rechten Rand: nimmt den gesamten Platzüberschuss auf,
+		# sodass Label- und Eingabespalten kompakt bleiben und nicht aufweiten.
+		img_layout.addItem(
+			QSpacerItem(0, 0, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum),
+			0, 4, 5, 1
+		)
+		img_layout.setColumnStretch(4, 1)
 
 		t3.addWidget(img_group)
 
@@ -1524,7 +1573,8 @@ class MainWindow(QMainWindow):
 		]
 		for name, coords in gps_presets:
 			btn = QPushButton(name)
-			btn.setFixedWidth(70)
+			# Breite für längste Beschriftung ("Hamburg") – sonst abgeschnitten
+			btn.setFixedWidth(84)
 			btn.setToolTip(coords)
 			btn.clicked.connect(lambda checked, c=coords: self._set_img_gps(c))
 			gps_row.addWidget(btn)
@@ -1606,7 +1656,8 @@ class MainWindow(QMainWindow):
 		
 		# Sync-Button: DateTimeDigitized = DateTimeOriginal
 		btn_sync_dt = QPushButton("= Original")
-		btn_sync_dt.setFixedWidth(80)
+		# Ausreichend Breite, damit " = Original" nicht abgeschnitten wird
+		btn_sync_dt.setFixedWidth(92)
 		btn_sync_dt.setToolTip("Kopiert DateTimeOriginal nach DateTimeDigitized")
 		btn_sync_dt.clicked.connect(lambda: self._sync_img_exif_datetimes())
 		dtd_row.addWidget(btn_sync_dt)
@@ -2310,7 +2361,7 @@ class MainWindow(QMainWindow):
 		return ImageParams(
 			width=self.img_w.value(),
 			height=self.img_h.value(),
-			source=self.img_bg.text().strip(),
+			source=self.img_bg.currentText().strip(),
 			fontfile=self.img_font.text().strip(),
 			font_size=self.img_font_size.value(),
 			output=self.img_out.text().strip(),
@@ -2327,6 +2378,29 @@ class MainWindow(QMainWindow):
 			exif_datetime_digitized=self.img_exif_dt_digitized.text().strip(),
 		)
 
+	# ---------- Preset-Logik (Hintergrund) ----------
+
+	def _on_bg_user_changed(self, *_args):
+		"""Merkt sich, dass der Nutzer den Hintergrund selbst geändert hat
+		(tippen in der Combo oder Auswahl aus der Liste)."""
+		if not self._bg_internal_change:
+			self._bg_preset_override = True
+
+	def _set_bg_value(self, value: str):
+		"""Programmatische Hintergrund-Änderung inkl. Swatch-Icon."""
+		self._bg_internal_change = True
+		try:
+			_set_combo_value(self.bg_edit, value)
+		finally:
+			self._bg_internal_change = False
+
+	def _preset_bg(self, value: str):
+		"""Hintergrund aus einem Preset nur setzen, solange der Nutzer den
+		Hintergrund nicht selbst geändert hat. Danach bleibt seine Wahl stehen."""
+		if self._bg_preset_override:
+			return
+		self._set_bg_value(value)
+
 	def apply_preset(self):
 		preset = self.preset_box.currentText()
 		if preset.startswith("720p Standard"):
@@ -2334,7 +2408,7 @@ class MainWindow(QMainWindow):
 			self.h_spin.setValue(720)
 			self.fps_spin.setValue(25)
 			self.dur_spin.setValue(300)
-			self.bg_edit.setCurrentText("black")
+			self._preset_bg("black")
 			self.chk_timecode_overlay.setChecked(True)
 			self.chk_pts_overlay.setChecked(True)
 			self.chk_container_timecode.setChecked(True)
@@ -2349,7 +2423,7 @@ class MainWindow(QMainWindow):
 			self.h_spin.setValue(1080)
 			self.fps_spin.setValue(25)
 			self.dur_spin.setValue(600)
-			self.bg_edit.setCurrentText("black")
+			self._preset_bg("black")
 			self.chk_timecode_overlay.setChecked(True)
 			self.chk_pts_overlay.setChecked(False)
 			self.chk_container_timecode.setChecked(True)
@@ -2364,7 +2438,7 @@ class MainWindow(QMainWindow):
 			self.h_spin.setValue(720)
 			self.fps_spin.setValue(60)
 			self.dur_spin.setValue(60)
-			self.bg_edit.setCurrentText("black")
+			self._preset_bg("black")
 			self.chk_timecode_overlay.setChecked(False)
 			self.chk_pts_overlay.setChecked(True)
 			self.chk_container_timecode.setChecked(False)
@@ -2379,7 +2453,7 @@ class MainWindow(QMainWindow):
 			self.h_spin.setValue(720)
 			self.fps_spin.setValue(25)
 			self.dur_spin.setValue(120)
-			self.bg_edit.setCurrentText("#050505")
+			self._preset_bg("#050505")
 			self.chk_timecode_overlay.setChecked(True)
 			self.chk_pts_overlay.setChecked(False)
 			self.chk_container_timecode.setChecked(True)
@@ -2394,7 +2468,7 @@ class MainWindow(QMainWindow):
 			self.h_spin.setValue(720)
 			self.fps_spin.setValue(25)
 			self.dur_spin.setValue(30)
-			self.bg_edit.setCurrentText("smptebars")
+			self._preset_bg("smptebars")
 			self.chk_timecode_overlay.setChecked(True)
 			self.chk_pts_overlay.setChecked(False)
 			self.chk_container_timecode.setChecked(True)
@@ -2562,14 +2636,16 @@ class MainWindow(QMainWindow):
 			QColor(self.bg_edit.currentText()), self, "Hintergrundfarbe"
 		)
 		if color.isValid():
-			self.bg_edit.setCurrentText(color.name())
+			self._set_bg_value(color.name())
+			# Farbwähler = Nutzer-Änderung: Presets dürfen diesen Wert nicht überschreiben
+			self._bg_preset_override = True
 
 	def _choose_img_bg_color(self):
 		color = QColorDialog.getColor(
-			QColor(self.img_bg.text()), self, "Hintergrundfarbe"
+			QColor(self.img_bg.currentText()), self, "Hintergrundfarbe"
 		)
 		if color.isValid():
-			self.img_bg.setText(color.name())
+			_set_combo_value(self.img_bg, color.name())
 
 	def _update_img_extension(self, fmt: str):
 		path = self.img_out.text()
