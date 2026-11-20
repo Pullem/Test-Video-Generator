@@ -5,6 +5,7 @@ from model import (
 	SettingsManager, FFmpegWorker, ImageWorker,
 	set_file_creation_time,
 	write_exif_to_image,
+	PIEEXIF_AVAILABLE,
 )
 
 
@@ -133,11 +134,24 @@ class Presenter:
 		self.view.clear_write_log()
 		self.view.set_write_controls_enabled(False)
 
+		# EXIF-Metadaten für Bilder zusammenstellen
+		exif_meta = {
+			"title": meta.meta_title,
+			"artist": meta.meta_artist,
+			"copyright": meta.meta_copyright,
+			"comment": meta.meta_comment,
+			"location": meta.meta_location,
+			"software": "FFmpeg Testvideo Generator",
+		}
+
 		jobs = []
 		for src, ct in entries:
 			entry = WriteFileEntry(source=src, creation_time=ct)
 			cmd, temp = WriteCommandBuilder.build(src, entry, meta)
-			jobs.append((cmd, src, ct))
+			# Für jedes File: per-file creation_time für EXIF DateTimeOriginal/DateTimeDigitized
+			file_exif_meta = exif_meta.copy()
+			file_exif_meta["creation_time"] = ct
+			jobs.append((cmd, src, ct, file_exif_meta))
 
 		self._write_worker = WriteWorker(jobs)
 		self._write_worker.log_line.connect(self.view.append_write_log)

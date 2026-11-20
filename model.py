@@ -702,18 +702,35 @@ class ImageWorker(QThread):
 			self.finished_error.emit(str(e))
 
 
+# Bild-Dateiendungen für EXIF-Schreiben
+IMAGE_EXTS = {".jpg", ".jpeg", ".tif", ".tiff", ".png", ".webp"}
+
+def _is_image_file(path: str) -> bool:
+	return Path(path).suffix.lower() in IMAGE_EXTS
+
+
 class WriteWorker(QThread):
 	log_line = pyqtSignal(str)
 	finished_ok = pyqtSignal()
 	finished_error = pyqtSignal(str)
 	file_done = pyqtSignal(int, str)
 
-	def __init__(self, jobs: list[tuple[list[str], str, str]]):
+	def __init__(self, jobs: list[tuple[list[str], str, str, dict]]):
+		"""
+		jobs: Liste von (cmd, src, ctime, exif_meta_dict)
+		exif_meta_dict: Dict mit EXIF-Metadaten für Bilder (title, artist, copyright, comment, location, creation_time)
+		"""
 		super().__init__()
 		self.jobs = jobs
 
 	def run(self):
-		for i, (cmd, src, ctime) in enumerate(self.jobs):
+		for i, job in enumerate(self.jobs):
+			# Entpacke je nach Länge (Rückwärtskompatibilität)
+			if len(job) == 3:
+				cmd, src, ctime = job
+				exif_meta = {}
+			else:
+				cmd, src, ctime, exif_meta = job
 			try:
 				self.log_line.emit(f"[{i+1}/{len(self.jobs)}] {src}")
 				self.log_line.emit(" ".join(cmd))
@@ -731,6 +748,34 @@ class WriteWorker(QThread):
 				orig = Path(src)
 				temp.replace(orig)
 				set_file_creation_time(src, ctime)
+
+				# EXIF-Metadaten in Bilder schreiben (JPG, TIFF, PNG, WebP)
+				if _is_image_file(src) and exif_meta:
+					if PIEEXIF_AVAILABLE:
+						try:
+							success = write_exif_to_image(
+								src,
+								creation_time=exif_meta.get("creation_time", ctime),
+								title=exif_meta.get("title", ""),
+								artist=exif_meta.get("artist", ""),
+								copyright=exif_meta.get("copyright", ""),
+								comment=exif_meta.get("comment", ""),
+								location=exif_meta.get("location", ""),
+								make=exif_meta.get("make", ""),
+								model=exif_meta.get("model", ""),
+								software=exif_meta.get("software", "FFmpeg Testvideo Generator"),
+								datetime_original=exif_meta.get("datetime_original", ""),
+								datetime_digitized=exif_meta.get("datetime_digitized", ""),
+							)
+							if success:
+								self.log_line.emit(f"  ✅ EXIF-Metadaten geschrieben")
+							else:
+								self.log_line.emit(f"  ⚠️ EXIF-Schreiben fehlgeschlagen")
+						except Exception as e:
+							self.log_line.emit(f"  ⚠️ EXIF-Fehler: {e}")
+					else:
+						self.log_line.emit(f"  ⚠️ EXIF-Schreiben übersprungen: piexif/Pillow nicht installiert (pip install piexif pillow)")
+
 				self.file_done.emit(i, src)
 			except Exception as e:
 				self.finished_error.emit(str(e))
